@@ -63,18 +63,21 @@ https://<GitHub 사용자명>.github.io/wonder/
 1. 아래 [문제 파일 형식](#문제-파일-형식)에 맞춰 `.md` 파일을 만듭니다.
 2. GitHub 저장소의 **`quizzes/` 폴더에 그 파일을 올립니다.** (웹에서 `Add file → Upload files`로 올려도 됩니다.)
 3. localhost에서는 `npm start`가 목록을 자동 갱신합니다. 일반 정적 서버를 쓴다면 `npm run manifest`를 한 번 실행합니다.
-4. GitHub에 Markdown 파일과 갱신된 `manifest.json`을 함께 올립니다.
 
 > 파일 이름 끝에 `-v7`처럼 버전 번호를 붙여도 됩니다.
 > 앱은 버전 번호를 뗀 앞부분(`wonder-quiz-chapters-1-5-v7.md` → `wonder-quiz-chapters-1-5`)으로 파일을 알아봅니다.
 > 같은 이름의 파일이 버전만 다르게 여러 개 있으면 **번호가 가장 큰 파일 하나만** 사용합니다.
 
-> 앱은 **`manifest.json`**, **서버가 주는 폴더 목록**, **GitHub API**를 병렬로 확인한 뒤 합집합을 사용합니다.
-> 따라서 GitHub Pages에서는 새로 올린 파일을 GitHub API로도 찾을 수 있습니다. 다만 API 제한이나 네트워크 장애가
-> 생겨도 안정적으로 열리게 하려면 갱신된 `manifest.json`을 항상 함께 올리는 것이 중요합니다.
+> GitHub Pages에서는 **GitHub 저장소의 실제 `quizzes/` 폴더 목록**을 가장 먼저 사용합니다.
+> 오래된 `manifest.json`과 합치지 않으므로 파일을 삭제하거나 이름을 바꿔도 예전 파일 때문에 로딩이 중단되지 않습니다.
+> `.github/workflows/sync-quiz-manifest.yml`이 Markdown 추가·삭제·이름 변경을 감지해 `manifest.json`도 자동 갱신합니다.
+> 따라서 GitHub에 Markdown 파일을 올릴 때 manifest를 직접 편집할 필요가 없습니다.
 >
-> 브라우저의 JavaScript만으로 서버 폴더를 직접 열람할 수는 없습니다. 그래서 localhost에서는 `npm start`가
-> 실제 폴더를 감시하여 manifest를 자동 생성하는 방식을 사용합니다.
+> `manifest.json`은 GitHub API를 사용할 수 없거나 일반 정적 서버에서 실행할 때를 위한 예비 목록입니다.
+> 브라우저의 JavaScript만으로 서버 폴더를 직접 열람할 수는 없으므로 localhost에서는 반드시 `npm start`를 권장합니다.
+> 이 서버는 실제 폴더를 감시해 Quiz와 Word 파일을 똑같은 로직으로 자동 반영합니다.
+> 일반 localhost 서버가 폴더 목록을 20개 등으로 잘라 보내더라도 앱은 manifest와 안전하게 보완하고,
+> 실제로 열리는 최신 파일만 골라 사용합니다.
 
 ## 시작 화면 이미지 바꾸기
 

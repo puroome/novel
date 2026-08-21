@@ -5,7 +5,7 @@ const QUIZ_DIR = 'quizzes';
 
 // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
 // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-21-r';
+const APP_VERSION = '2026-08-22-t';
 
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;

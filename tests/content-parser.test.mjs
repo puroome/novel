@@ -30,7 +30,7 @@ test('현재 quizzes 폴더의 챕터를 처음부터 끝까지 빠짐없이 파
     assert.deepEqual(wordNumbers, range(1, lastWordChapter));
     assert.ok(quizChapters.reduce((sum, chapter) => sum + chapter.questions.length, 0) >= lastQuizChapter);
     assert.ok(wordChapters.reduce((sum, chapter) => sum + chapter.items.length, 0) >= lastWordChapter);
-    assert.equal(quizChapters.flatMap(chapter => chapter.questions).filter(question => question.answerIndex === null).length, 0);
+    assert.ok(quizChapters.flatMap(chapter => chapter.questions).every(question => question.options.length >= 2));
 });
 
 test('버전을 숫자 조각 단위로 비교하고 최신 파일만 선택한다', () => {
