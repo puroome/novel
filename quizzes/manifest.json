@@ -1,8 +1,17 @@
 {
   "title": "Wonder 독서 퀴즈",
   "files": [
-    "wonder-quiz-chapters-1-5.md",
-    "wonder-quiz-chapters-6-10.md",
-    "wonder-quiz-chapters-11-15.md"
+    "wonder-quiz-chapters-1-5-v7.md",
+    "wonder-quiz-chapters-6-10-v2.md",
+    "wonder-quiz-chapters-11-15-v2.md",
+    "wonder-quiz-chapters-16-20-v2.md",
+    "wonder-quiz-chapters-21-25-v2.md",
+    "wonder-quiz-chapters-26-30-v2.md",
+    "wonder-word-chapters-1-5.md",
+    "wonder-word-chapters-6-10.md",
+    "wonder-word-chapters-11-15.md",
+    "wonder-word-chapters-16-20.md",
+    "wonder-word-chapters-21-25.md",
+    "wonder-word-chapters-26-30.md"
   ]
 }

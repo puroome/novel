@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 앱을 고칠 때마다 옛 화면이 캐시에 남지 않도록 합니다. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Wonder 독서 퀴즈</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -25,18 +27,58 @@
 
             <h1 class="text-3xl sm:text-4xl font-bold text-blue-800 mb-8">WONDER</h1>
 
-            <button id="start-btn" onclick="startQuiz()" class="bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 px-10 rounded-xl shadow-md hover:shadow-lg transition duration-200">
-                Start Quiz
-            </button>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button id="start-btn" onclick="startQuiz()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 px-10 rounded-xl shadow-md hover:shadow-lg transition duration-200">
+                    Start Quiz
+                </button>
+                <button id="word-btn" onclick="startWords()" class="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-lg font-bold py-4 px-10 rounded-xl shadow-md hover:shadow-lg transition duration-200">
+                    Learn Words
+                </button>
+            </div>
 
             <p class="text-sm text-gray-500 mt-6 min-h-[1.25rem]" id="start-status"></p>
+
+            <div class="mt-2 flex items-center justify-center gap-4">
+                <button id="reload-btn" onclick="reloadLibrary()" class="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition duration-200">
+                    파일 다시 읽기
+                </button>
+                <button id="detail-btn" onclick="toggleDetails()" class="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition duration-200">
+                    자세히
+                </button>
+            </div>
+
+            <pre id="detail-box" class="hidden mt-3 text-left text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-60 overflow-auto whitespace-pre-wrap"></pre>
         </div>
 
         <!-- 2. 챕터 선택 화면 -->
         <div id="chapter-screen" class="hidden">
-            <h2 class="text-2xl font-bold text-blue-800 mb-6 text-center">SELECT A CHAPTER</h2>
+            <div class="flex items-center gap-3 mb-6">
+                <button onclick="goToStart()" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-blue-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
+                        </svg>
+                </button>
+                <h2 class="flex-1 text-2xl font-bold text-blue-800 text-center pr-12">SELECT A CHAPTER</h2>
+            </div>
             <div id="chapter-list" class="space-y-3 max-h-96 overflow-y-auto pr-2">
                 <!-- 자바스크립트로 챕터 버튼들이 여기에 생성됩니다 -->
+            </div>
+        </div>
+
+        <!-- 2-2. 단어장 챕터 선택 화면 -->
+        <div id="word-chapter-screen" class="hidden">
+            <div class="flex items-center gap-3 mb-6">
+                <button onclick="goToStart()" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
+                        </svg>
+                </button>
+                <h2 class="flex-1 text-2xl font-bold text-red-700 text-center pr-12">SELECT A CHAPTER</h2>
+            </div>
+            <div id="word-chapter-list" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                <!-- 자바스크립트로 단어장 챕터 버튼들이 여기에 생성됩니다 -->
             </div>
         </div>
 
@@ -76,6 +118,32 @@
             </div>
         </div>
 
+        <!-- 3-2. 단어 학습 화면 -->
+        <div id="word-screen" class="hidden">
+            <div class="flex justify-between items-center gap-3 mb-6 border-b pb-4">
+                <div class="flex items-center gap-3 min-w-0">
+                    <button onclick="goToWordChapters()" aria-label="챕터 선택으로 돌아가기" title="챕터 선택으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
+                        </svg>
+                    </button>
+                    <h2 id="word-chapter-title" class="text-xl font-bold text-red-700 truncate">챕터 제목</h2>
+                </div>
+                <span id="word-count-text" class="shrink-0 text-gray-500 font-medium">0 단어</span>
+            </div>
+
+            <div id="word-list" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                <!-- 자바스크립트로 단어 카드가 여기에 생성됩니다 -->
+            </div>
+
+            <div class="mt-8 text-right">
+                <button onclick="goToWordChapters()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200">
+                    다른 챕터 고르기 ➔
+                </button>
+            </div>
+        </div>
+
         <!-- 4. 결과 화면 -->
         <div id="result-screen" class="hidden text-center py-8">
             <h2 class="text-3xl font-bold text-blue-800 mb-4">🎉 챕터 완료!</h2>
@@ -91,19 +159,72 @@
         // 퀴즈 마크다운(.md) 파일들이 들어 있는 폴더 이름입니다.
         const QUIZ_DIR = 'quizzes';
 
+        // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
+        // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
+        const APP_VERSION = '2026-08-21-g';
+
+        async function ensureLatestApp() {
+            if (location.protocol === 'file:') return;
+
+            try {
+                const res = await fetch(`${location.pathname}?_=${Date.now()}`, { cache: 'no-store' });
+                if (!res.ok) return;
+
+                const match = (await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/);
+                if (!match || match[1] === APP_VERSION) return;
+
+                // 주소에 새 번호를 붙여서 캐시가 아닌 새 파일을 받게 합니다.
+                location.replace(`${location.pathname}?v=${encodeURIComponent(match[1])}`);
+            } catch (error) {
+                console.warn('앱 버전을 확인하지 못했습니다.', error);
+            }
+        }
+
+        // 파일 이름 끝에 붙은 버전 번호(예: -v7, _v2, -v1.3)는 무시하고 앞부분만 봅니다.
+        // 'wonder-quiz-chapters-1-5-v7.md' → 'wonder-quiz-chapters-1-5'
+        function baseFileName(name) {
+            return name
+                .replace(/\.md$/i, '')
+                .replace(/[-_ ]v\d+(?:\.\d+)*$/i, '')
+                .trim();
+        }
+
+        // 같은 파일의 버전이 여러 개 있으면 번호가 가장 큰 파일 하나만 씁니다.
+        function fileVersion(name) {
+            const match = name.replace(/\.md$/i, '').match(/[-_ ]v(\d+(?:\.\d+)*)$/i);
+            if (!match) return -1; // 버전 표시가 없는 파일이 가장 낮은 순번
+            return parseFloat(match[1]);
+        }
+
+        // 브라우저가 예전 내용을 캐시에서 꺼내 쓰지 못하도록 주소 끝에 시각을 붙입니다.
+        function noCacheUrl(url) {
+            return `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`;
+        }
+
+        // 이름에 'word'가 들어간 파일은 단어장(Learn Words)으로, 나머지는 퀴즈로 읽습니다.
+        // 예: wonder-word-chapters-1-5.md → 단어장 / wonder-quiz-chapters-1-5.md → 퀴즈
+        function isWordFile(name) {
+            return /(^|[-_ ])words?([-_ ]|$)/i.test(baseFileName(name));
+        }
+
         // 전역 변수: 파싱된 전체 데이터와 현재 진행 상태를 저장합니다.
         let allChapters = [];
         let currentChapterIndex = 0;
         let currentQuestionIndex = 0;
         let score = 0;
-        let quizLoadPromise = null; // 퀴즈 파일을 미리 받아 두는 작업
+        let allWordChapters = [];       // 단어장(Learn Words) 챕터
+        let currentWordChapterIndex = 0;
+        let libraryLoadPromise = null;  // 퀴즈/단어장 파일을 미리 받아 두는 작업
+        let libraryLoadedAt = 0;        // 마지막으로 폴더를 읽은 시각
+        let lastLibrary = null;         // 마지막으로 읽어 들인 결과('자세히'에서 보여 줍니다)
+        const LIBRARY_MAX_AGE_MS = 15000; // 이보다 오래된 결과는 버리고 폴더를 다시 읽습니다.
 
         // --- [1단계] 화면 전환 로직 ---
+        const SCREEN_IDS = ['start-screen', 'chapter-screen', 'quiz-screen', 'result-screen',
+                            'word-chapter-screen', 'word-screen'];
+
         function showScreen(screenId) {
-            document.getElementById('start-screen').classList.add('hidden');
-            document.getElementById('chapter-screen').classList.add('hidden');
-            document.getElementById('quiz-screen').classList.add('hidden');
-            document.getElementById('result-screen').classList.add('hidden');
+            SCREEN_IDS.forEach(id => document.getElementById(id).classList.add('hidden'));
 
             const screen = document.getElementById(screenId);
             screen.classList.remove('hidden');
@@ -140,108 +261,344 @@
             const items = await res.json();
             if (!Array.isArray(items)) return null;
 
-            return items
+            const names = items
                 .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.md'))
                 .map(item => item.name);
+
+            return names.length > 0 ? { names, source: 'GitHub' } : null;
         }
 
         // GitHub API를 쓸 수 없을 때(로컬 실행, 접속 제한 등) manifest.json으로 대신합니다.
         async function listFilesFromManifest() {
-            const res = await fetch(`${QUIZ_DIR}/manifest.json`, { cache: 'no-cache' });
+            const res = await fetch(noCacheUrl(`${QUIZ_DIR}/manifest.json`), { cache: 'no-store' });
             if (!res.ok) throw new Error('퀴즈 목록 파일(manifest.json)을 찾을 수 없습니다.');
 
             const manifest = await res.json();
-            return Array.isArray(manifest.files) ? manifest.files : [];
+            const names = Array.isArray(manifest.files) ? manifest.files : [];
+            return { names, source: 'manifest.json', fromManifest: true };
+        }
+
+        // 로컬 서버(예: python -m http.server)처럼 폴더 목록을 HTML로 보여 주는 경우,
+        // 그 목록에서 .md 파일 이름을 그대로 뽑아 씁니다.
+        async function listFilesFromDirectoryIndex() {
+            const res = await fetch(noCacheUrl(`${QUIZ_DIR}/`), { cache: 'no-store' });
+            if (!res.ok) return null;
+
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('text/html')) return null;
+
+            const html = await res.text();
+            const names = new Set();
+            const linkPattern = /href\s*=\s*["']([^"']+\.md)["']/gi;
+            let match;
+
+            while ((match = linkPattern.exec(html)) !== null) {
+                const fileName = decodeURIComponent(match[1].split('/').pop().split('?')[0]);
+                if (fileName) names.add(fileName);
+            }
+
+            return names.size > 0 ? { names: Array.from(names), source: '폴더 목록' } : null;
         }
 
         async function listQuizFiles() {
-            try {
-                const names = await listFilesFromGitHub();
-                if (names && names.length > 0) return names;
-            } catch (error) {
-                console.warn('GitHub 목록 조회에 실패해 manifest.json으로 대체합니다.', error);
+            // 1순위: GitHub API(=GitHub Pages에 올렸을 때), 2순위: 서버가 주는 폴더 목록
+            const finders = [listFilesFromGitHub, listFilesFromDirectoryIndex];
+
+            for (const finder of finders) {
+                try {
+                    const listing = await finder();
+                    if (listing && listing.names.length > 0) return listing;
+                } catch (error) {
+                    console.warn(`${finder.name}에 실패해 다음 방법으로 넘어갑니다.`, error);
+                }
             }
+
+            // 마지막 수단: 미리 적어 둔 manifest.json
             return await listFilesFromManifest();
         }
 
-        // --- [3단계] 퀴즈 파일 불러오기 ---
-        // 퀴즈 파일을 모두 읽어 챕터 배열로 만들어 돌려줍니다.
-        async function fetchAllChapters() {
-            let fileNames = await listQuizFiles();
+        // manifest.json에 적힌 이름과 실제 파일 이름의 버전 번호가 다를 수 있습니다.
+        // (예: 목록에는 wonder-word-chapters-1-5.md, 실제 파일은 wonder-word-chapters-1-5-v4.md)
+        // 그래서 적힌 이름이 없으면 버전 번호만 바꿔 가며 같은 파일을 찾아봅니다.
+        const MAX_PROBE_VERSION = 12;
+
+        function fileNameCandidates(name) {
+            const base = baseFileName(name);
+            const candidates = [name, `${base}.md`];
+
+            for (let version = MAX_PROBE_VERSION; version >= 2; version--) {
+                candidates.push(`${base}-v${version}.md`);
+            }
+
+            return Array.from(new Set(candidates));
+        }
+
+        // 파일 하나를 읽어 옵니다. 찾지 못하면 null을 돌려줍니다.
+        async function fetchQuizFile(name, allowProbe) {
+            const candidates = allowProbe ? fileNameCandidates(name) : [name];
+
+            for (const candidate of candidates) {
+                try {
+                    const res = await fetch(noCacheUrl(`${QUIZ_DIR}/${encodeURIComponent(candidate)}`), { cache: 'no-store' });
+                    if (res.ok) return { name: candidate, text: await res.text() };
+                } catch (error) {
+                    console.warn(`'${candidate}' 파일을 읽는 중 오류가 났습니다.`, error);
+                }
+            }
+
+            console.warn(`'${name}' 파일을 찾지 못해 건너뜁니다.`);
+            return null;
+        }
+
+        // --- [3단계] 퀴즈/단어장 파일 불러오기 ---
+        // 폴더 안의 파일을 모두 읽어 퀴즈 챕터와 단어장 챕터로 나누어 돌려줍니다.
+        async function fetchLibrary() {
+            const listing = await listQuizFiles();
+            let fileNames = listing.names;
 
             if (fileNames.length === 0) {
                 throw new Error(`'${QUIZ_DIR}' 폴더에 마크다운(.md) 파일이 없습니다.`);
             }
 
-            // 파일 이름 속 숫자를 기준으로 정렬합니다. (1-5 → 6-10 → 11-15)
-            fileNames.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            // 버전 번호를 뺀 이름이 같은 파일이 여러 개면 가장 최신 버전만 남깁니다.
+            const bestByBase = new Map();
+            fileNames.forEach(name => {
+                const key = baseFileName(name);
+                const kept = bestByBase.get(key);
+                if (!kept || fileVersion(name) > fileVersion(kept)) bestByBase.set(key, name);
+            });
+            fileNames = Array.from(bestByBase.values());
 
-            const contents = await Promise.all(fileNames.map(async (name) => {
-                const res = await fetch(`${QUIZ_DIR}/${encodeURIComponent(name)}`, { cache: 'no-cache' });
-                if (!res.ok) throw new Error(`'${name}' 파일을 불러오지 못했습니다.`);
-                return await res.text();
-            }));
+            // 버전 번호를 뺀 이름 속 숫자를 기준으로 정렬합니다. (1-5 → 6-10 → 11-15)
+            fileNames.sort((a, b) => baseFileName(a).localeCompare(baseFileName(b), undefined, { numeric: true }));
 
-            const chapters = parseMarkdownFiles(contents);
+            // 폴더 목록을 그대로 읽어 온 경우에는 이름이 정확하므로 그대로 받고,
+            // manifest.json으로 받은 이름은 버전 번호가 다를 수 있어 다른 후보도 찾아봅니다.
+            const allowProbe = listing.fromManifest === true;
 
-            if (chapters.length === 0) {
-                throw new Error('퀴즈 데이터를 찾을 수 없습니다. 마크다운 파일의 양식을 확인해 주세요.');
+            // 파일을 옮기는 도중이면 한두 개가 잠깐 안 읽힐 수 있어, 실패한 것만 한 번 더 시도합니다.
+            let loaded = await Promise.all(fileNames.map(name => fetchQuizFile(name, allowProbe)));
+
+            const retryIndexes = loaded.map((file, index) => file ? -1 : index).filter(index => index >= 0);
+            if (retryIndexes.length > 0) {
+                for (const index of retryIndexes) {
+                    loaded[index] = await fetchQuizFile(fileNames[index], allowProbe);
+                }
             }
 
-            return chapters;
+            const files = loaded.filter(Boolean);
+            const skipped = fileNames.filter((name, index) => !loaded[index]);
+
+            if (files.length === 0) {
+                throw new Error(`'${QUIZ_DIR}' 폴더의 마크다운 파일을 하나도 읽지 못했습니다.`);
+            }
+
+            const textsOf = (isWord) => files.filter(file => isWordFile(file.name) === isWord).map(file => file.text);
+
+            console.info(`[${listing.source}] 목록 ${fileNames.length}개 중 ${files.length}개를 읽었습니다:`, files.map(file => file.name));
+            if (skipped.length > 0) console.warn('못 읽은 파일:', skipped);
+
+            return {
+                source: listing.source,
+                rawNames: listing.names.slice(),
+                fileNames: files.map(file => file.name),
+                listedCount: fileNames.length,
+                skipped: skipped,
+                // 목록에 있던 파일을 하나라도 못 읽었다면 '불완전한 결과'로 표시해 둡니다.
+                complete: skipped.length === 0,
+                quizChapters: parseMarkdownFiles(textsOf(false)),
+                wordChapters: parseWordFiles(textsOf(true))
+            };
         }
 
         // 시작 화면이 떠 있는 동안 미리 파일을 받아 둡니다.
-        // 그래서 'Start Quiz'를 누르면 대개 기다림 없이 바로 넘어갑니다.
-        function prefetchQuizzes() {
-            quizLoadPromise = fetchAllChapters();
-            quizLoadPromise.catch(() => {}); // 버튼을 누를 때 오류를 처리하므로 여기서는 넘어갑니다.
+        // 그래서 'Start Quiz'나 'Learn Words'를 누르면 대개 기다림 없이 바로 넘어갑니다.
+        function prefetchLibrary() {
+            libraryLoadedAt = Date.now();
+            libraryLoadPromise = fetchLibrary();
+            libraryLoadPromise.catch(() => {}); // 버튼을 누를 때 오류를 처리하므로 여기서는 넘어갑니다.
         }
 
-        // --- 'Start Quiz' 버튼 ---
-        async function startQuiz() {
-            const btn = document.getElementById('start-btn');
+        // --- 'Start Quiz' / 'Learn Words' 버튼 ---
+        function startQuiz() { return openLibrary('quiz'); }
+        function startWords() { return openLibrary('word'); }
+
+        async function openLibrary(mode) {
+            const buttons = [document.getElementById('start-btn'), document.getElementById('word-btn')];
             const statusText = document.getElementById('start-status');
 
-            btn.disabled = true;
-            btn.classList.add('opacity-60', 'cursor-not-allowed');
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('opacity-60', 'cursor-not-allowed');
+            });
             statusText.classList.remove('text-red-600');
             statusText.classList.add('text-gray-500');
-            statusText.innerText = '퀴즈를 불러오는 중입니다...';
+            statusText.innerText = mode === 'quiz' ? '퀴즈를 불러오는 중입니다...' : '단어장을 불러오는 중입니다...';
 
             try {
-                if (!quizLoadPromise) prefetchQuizzes();
-                allChapters = await quizLoadPromise;
+                // 읽어 둔 결과가 오래됐으면 폴더를 다시 읽습니다.
+                // (앱을 열어 둔 채 파일을 새로 넣어도 버튼만 누르면 바로 반영됩니다.)
+                if (!libraryLoadPromise || Date.now() - libraryLoadedAt > LIBRARY_MAX_AGE_MS) prefetchLibrary();
+                const library = await libraryLoadPromise;
+                lastLibrary = library;
 
-                statusText.innerText = '';
-                renderChapterList();
-                showScreen('chapter-screen');
+                // 파일을 옮기는 도중에 읽었다면 다음에 누를 때 폴더를 새로 읽게 합니다.
+                if (!library.complete) libraryLoadPromise = null;
+
+                if (mode === 'quiz') {
+                    allChapters = library.quizChapters;
+                    if (allChapters.length === 0) {
+                        throw new Error('마크다운 파일의 양식을 확인해 주세요.');
+                    }
+                    statusText.innerText = '';
+                    renderChapterList();
+                    showScreen('chapter-screen');
+                } else {
+                    allWordChapters = library.wordChapters;
+                    if (allWordChapters.length === 0) {
+                        const wordFiles = library.fileNames.filter(isWordFile);
+                        throw new Error(wordFiles.length > 0
+                            ? `단어장 파일(${wordFiles.join(', ')})의 양식을 확인해 주세요. '## 📖 Chapter ...' 아래에 '* **[V1]**' 항목이 있어야 합니다.`
+                            : `이름에 'word'가 들어간 마크다운 파일을 '${QUIZ_DIR}' 폴더에 넣어 주세요. (지금 읽은 파일: ${library.fileNames.join(', ') || '없음'})`);
+                    }
+                    statusText.innerText = '';
+                    renderWordChapterList();
+                    showScreen('word-chapter-screen');
+                }
 
             } catch (error) {
-                console.error('퀴즈 불러오기 오류:', error);
-                quizLoadPromise = null; // 버튼을 다시 누르면 새로 시도합니다.
+                console.error('불러오기 오류:', error);
+                libraryLoadPromise = null; // 버튼을 다시 누르면 새로 시도합니다.
 
                 statusText.classList.remove('text-gray-500');
                 statusText.classList.add('text-red-600');
-                statusText.innerText = describeLoadError(error);
-                btn.innerText = '다시 시도';
+                statusText.innerText = describeLoadError(error, mode);
 
             } finally {
-                btn.disabled = false;
-                btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                buttons.forEach(btn => {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                });
             }
         }
 
-        function describeLoadError(error) {
-            if (location.protocol === 'file:') {
-                return 'HTML 파일을 더블클릭해서 열면 브라우저 보안 정책 때문에 퀴즈 파일을 읽을 수 없습니다. 웹 주소(https://)로 접속해 주세요.';
+        // 앱을 열어 둔 채 폴더에 파일을 넣거나 이름을 바꿨을 때 쓰는 버튼입니다.
+        async function reloadLibrary() {
+            const statusText = document.getElementById('start-status');
+
+            libraryLoadPromise = null;
+            prefetchLibrary();
+
+            statusText.classList.remove('text-red-600');
+            statusText.classList.add('text-gray-500');
+            statusText.innerText = '파일을 다시 읽는 중입니다...';
+
+            try {
+                const library = await libraryLoadPromise;
+                lastLibrary = library;
+                statusText.innerText = describeLibrary(library);
+                renderDetails();
+            } catch (error) {
+                console.error('다시 읽기 오류:', error);
+                libraryLoadPromise = null;
+
+                statusText.classList.remove('text-gray-500');
+                statusText.classList.add('text-red-600');
+                statusText.innerText = describeLoadError(error, 'quiz');
             }
-            return `퀴즈를 불러오지 못했습니다. ${error.message || '알 수 없는 오류가 발생했습니다.'}`;
+        }
+
+        // 폴더에서 무엇을 봤고 무엇을 읽었는지 그대로 보여 줍니다.
+        function renderDetails() {
+            const box = document.getElementById('detail-box');
+            if (!lastLibrary) {
+                box.innerText = '아직 읽은 파일이 없습니다. [파일 다시 읽기]를 눌러 주세요.';
+                return;
+            }
+
+            const wordFiles = lastLibrary.fileNames.filter(isWordFile);
+            const quizFiles = lastLibrary.fileNames.filter(name => !isWordFile(name));
+
+            box.innerText = [
+                `주소: ${location.href}`,
+                `목록을 읽은 곳: ${lastLibrary.source}`,
+                ``,
+                `폴더에서 본 파일 ${lastLibrary.rawNames.length}개:`,
+                ...lastLibrary.rawNames.map(name => `  · ${name}`),
+                ``,
+                `퀴즈로 읽은 파일 ${quizFiles.length}개: ${quizFiles.join(', ') || '없음'}`,
+                `단어장으로 읽은 파일 ${wordFiles.length}개: ${wordFiles.join(', ') || '없음'}`,
+                lastLibrary.skipped.length > 0 ? `못 읽은 파일: ${lastLibrary.skipped.join(', ')}` : ''
+            ].filter(line => line !== '').join('\n');
+        }
+
+        function toggleDetails() {
+            const box = document.getElementById('detail-box');
+            renderDetails();
+            box.classList.toggle('hidden');
+        }
+
+        // 무엇을 얼마나 읽었는지 한 줄로 알려 줍니다.
+        function describeLibrary(library) {
+            let text = `퀴즈 ${library.quizChapters.length}챕터 · 단어장 ${library.wordChapters.length}챕터 `
+                + `(${library.source} ${library.listedCount}개 중 ${library.fileNames.length}개 읽음)`;
+
+            if (library.skipped.length > 0) {
+                text += ` · 못 읽은 파일: ${library.skipped.join(', ')}`;
+            }
+
+            return text;
+        }
+
+        function describeLoadError(error, mode) {
+            const what = mode === 'word' ? '단어장' : '퀴즈';
+            if (location.protocol === 'file:') {
+                return `HTML 파일을 더블클릭해서 열면 브라우저 보안 정책 때문에 ${what} 파일을 읽을 수 없습니다. 웹 주소(https://)로 접속해 주세요.`;
+            }
+            return `${what}을 불러오지 못했습니다. ${error.message || '알 수 없는 오류가 발생했습니다.'}`;
         }
 
         // 퀴즈를 풀던 중에 챕터 선택 화면으로 돌아갑니다.
         function goToChapters() {
             showScreen('chapter-screen');
+        }
+
+        // 단어장을 보던 중에 챕터 선택 화면으로 돌아갑니다.
+        function goToWordChapters() {
+            showScreen('word-chapter-screen');
+        }
+
+        // 챕터 선택 화면의 홈 아이콘: 맨 첫 화면(Start Quiz / Learn Words)으로 갑니다.
+        function goToStart() {
+            document.getElementById('start-status').innerText = '';
+            showScreen('start-screen');
+        }
+
+        // --- 해설 표시용 도우미 ---
+        function escapeHtml(text) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return String(text).replace(/[&<>"']/g, ch => map[ch]);
+        }
+
+        // 해설 속 [ENG: ...]는 정답의 근거가 되는 원문입니다.
+        // 'ENG:' 표시와 대괄호는 지우고, 원문만 따로 박스에 담아 보여 줍니다.
+        function renderExplanation(text) {
+            const segments = String(text).split(/\[\s*ENG\s*:\s*([\s\S]*?)\]/gi);
+            let html = '';
+
+            segments.forEach((chunk, index) => {
+                const piece = chunk.trim();
+                if (!piece) return;
+
+                if (index % 2 === 1) {
+                    // 원문 박스
+                    html += `<span class="block my-3 px-4 py-3 rounded-lg bg-white border border-gray-300 border-l-4 border-l-blue-400 text-gray-600 font-normal leading-relaxed">${escapeHtml(piece)}</span>`;
+                } else {
+                    html += `<span class="block">${escapeHtml(piece)}</span>`;
+                }
+            });
+
+            return html;
         }
 
         // --- [4단계] 마크다운 텍스트 파싱 (핵심 로직) ---
@@ -345,6 +702,216 @@
                 .map(item => item.chapter);
         }
 
+
+        // --- [4-2단계] 단어장 마크다운 파싱 ---
+        // '* **[V1]**'(어휘)와 '* **[BG1]**'(배경지식) 항목을 챕터별로 모읍니다.
+        function parseWordFiles(fileContents) {
+            let parsedChapters = [];
+
+            fileContents.forEach(content => {
+                const chapterBlocks = content.split(/##\s*📖\s*(Chapter.*)/i);
+
+                for (let i = 1; i < chapterBlocks.length; i += 2) {
+                    // 챕터 제목의 괄호 안 내용(한글 해석)은 퀴즈와 마찬가지로 지웁니다.
+                    let chapterTitle = chapterBlocks[i].replace(/\s*\([^)]*\)/g, '').trim();
+                    let chapterBody = chapterBlocks[i + 1] || '';
+                    let items = [];
+
+                    // 다음 항목([V2] 등)이나 소제목(###), 구분선(---)을 만나기 전까지가 한 항목입니다.
+                    const itemPattern = /\*\s*\*\*\[(V|BG)(\d+)\]\*\*([\s\S]*?)(?=\n\s*\*\s*\*\*\[(?:V|BG)\d+\]\*\*|\n\s*#{2,3}\s|\n\s*---|$)/gi;
+                    let match;
+
+                    while ((match = itemPattern.exec(chapterBody)) !== null) {
+                        const kind = match[1].toUpperCase();
+                        const id = kind + match[2];
+                        const chunk = match[3];
+
+                        if (kind === 'V') {
+                            const headword = pickField(chunk, '어휘');
+                            // 예전 형식('**단어** ｜ 뜻')도 그대로 읽을 수 있게 구분 기호를 살펴봅니다.
+                            const separatorIndex = headword.search(/[｜|]/);
+                            const oldMeaning = separatorIndex >= 0 ? headword.slice(separatorIndex + 1) : '';
+
+                            items.push({
+                                type: 'word',
+                                id: id,
+                                sentence: pickField(chunk, '문장'),
+                                word: cleanInline(separatorIndex >= 0 ? headword.slice(0, separatorIndex) : headword),
+                                pos: cleanInline(pickField(chunk, '품사')),
+                                meaning: cleanInline(pickField(chunk, '의미') || oldMeaning),
+                                note: pickField(chunk, '해설'),
+                                derivatives: splitEntries(pickField(chunk, '파생어')),
+                                collocations: splitEntries(pickField(chunk, '연어'))
+                            });
+                        } else {
+                            items.push({
+                                type: 'background',
+                                id: id,
+                                title: pickField(chunk, '제목'),
+                                note: pickField(chunk, '설명')
+                            });
+                        }
+                    }
+
+                    if (items.length > 0) {
+                        parsedChapters.push({ title: chapterTitle, items: items });
+                    }
+                }
+            });
+
+            return sortChapters(parsedChapters);
+        }
+
+        // '* *문장*: ...' 처럼 적힌 항목에서 라벨 뒤의 내용만 뽑아냅니다.
+        function pickField(text, label) {
+            const pattern = new RegExp('\\*\\s*' + label + '\\s*\\*\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*\\*\\s*\\*|$)');
+            const match = text.match(pattern);
+            return match ? match[1].trim() : '';
+        }
+
+        // 굵게(**) · 코드(`) 표시를 걷어 내고 다듬습니다.
+        function cleanInline(text) {
+            return String(text).replace(/\*\*/g, '').replace(/`/g, '').trim();
+        }
+
+        // '파생어'·'연어'처럼 쉼표로 이어 쓴 항목을 하나씩 나눕니다.
+        // 괄호 안의 쉼표('짜증, 골칫거리')는 자르지 않습니다.
+        function splitEntries(text) {
+            const cleaned = cleanInline(text);
+            if (!cleaned) return [];
+
+            let depth = 0;
+            let current = '';
+            const entries = [];
+
+            for (const ch of cleaned) {
+                if (ch === '(' || ch === '（') depth++;
+                else if (ch === ')' || ch === '）') depth = Math.max(0, depth - 1);
+
+                if (ch === ',' && depth === 0) {
+                    entries.push(current);
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            entries.push(current);
+
+            return entries.map(entry => entry.trim()).filter(Boolean).map(entry => {
+                // '단어 (뜻)' 형태면 단어와 뜻을 나누어 둡니다.
+                const match = entry.match(/^([\s\S]*?)\s*[(（]([\s\S]*)[)）]\s*$/);
+                return match ? { term: match[1].trim(), gloss: match[2].trim() } : { term: entry, gloss: '' };
+            });
+        }
+
+        // [SENTENCE]...[/SENTENCE] 표시는 지우고, [RED: ...] 부분만 빨갛게 강조합니다.
+        function renderMarkedText(text) {
+            const cleaned = String(text).replace(/\[\/?\s*SENTENCE\s*\]/gi, '').trim();
+            const segments = cleaned.split(/\[\s*RED\s*:\s*([\s\S]*?)\]/gi);
+            let html = '';
+
+            segments.forEach((chunk, index) => {
+                if (index % 2 === 1) {
+                    html += `<span class="font-bold text-red-600">${escapeHtml(chunk.trim())}</span>`;
+                } else if (chunk) {
+                    html += escapeHtml(chunk);
+                }
+            });
+
+            return html;
+        }
+
+        // --- [5-2단계] 단어장 챕터 목록 ---
+        function renderWordChapterList() {
+            const listContainer = document.getElementById('word-chapter-list');
+            listContainer.innerHTML = '';
+
+            allWordChapters.forEach((chapter, index) => {
+                const wordCount = chapter.items.filter(item => item.type === 'word').length;
+                const bgCount = chapter.items.length - wordCount;
+                const countLabel = bgCount > 0 ? `${wordCount} 단어 · ${bgCount} 배경지식` : `${wordCount} 단어`;
+
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left bg-white border-2 border-red-100 hover:border-red-500 hover:bg-red-50 p-4 rounded-xl transition duration-200 flex justify-between items-center gap-3 group";
+                btn.innerHTML = `
+                    <span class="font-bold text-gray-800 group-hover:text-red-700">${escapeHtml(chapter.title)}</span>
+                    <span class="shrink-0 text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${countLabel}</span>
+                `;
+                btn.onclick = () => startWordChapter(index);
+                listContainer.appendChild(btn);
+            });
+        }
+
+        // 파생어·연어는 해설과 눈에 띄게 구분되도록 알약 모양 칩으로 보여 줍니다.
+        // (무엇인지 이름표를 달지 않고 색으로만 구분합니다: 파생어=빨강 계열, 연어=남색 계열)
+        function renderEntryRow(entries, kind) {
+            if (!entries || entries.length === 0) return '';
+
+            const style = kind === 'derivative'
+                ? { box: 'bg-red-50 border-red-100', term: 'text-red-700', gloss: 'text-red-400' }
+                : { box: 'bg-slate-50 border-slate-200', term: 'text-slate-700', gloss: 'text-slate-400' };
+
+            const chips = entries.map(entry => `
+                <span class="inline-flex items-baseline gap-1.5 rounded-full border ${style.box} px-3 py-1 text-sm">
+                    <span class="font-semibold ${style.term}">${escapeHtml(entry.term)}</span>
+                    ${entry.gloss ? `<span class="${style.gloss}">${escapeHtml(entry.gloss)}</span>` : ''}
+                </span>
+            `).join('');
+
+            return `<div class="flex flex-wrap gap-2">${chips}</div>`;
+        }
+
+        // --- [6-2단계] 단어 학습장 그리기 ---
+        function startWordChapter(index) {
+            currentWordChapterIndex = index;
+            const chapter = allWordChapters[index];
+            const wordCount = chapter.items.filter(item => item.type === 'word').length;
+
+            document.getElementById('word-chapter-title').innerText = chapter.title;
+            document.getElementById('word-count-text').innerText = `${wordCount} 단어`;
+
+            const listContainer = document.getElementById('word-list');
+            listContainer.innerHTML = '';
+            listContainer.scrollTop = 0;
+
+            let wordNumber = 0;
+
+            chapter.items.forEach(item => {
+                const card = document.createElement('div');
+
+                if (item.type === 'word') {
+                    wordNumber++;
+                    card.className = "border-2 border-red-100 rounded-xl p-4 bg-white";
+                    card.innerHTML = `
+                        <div class="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-3">
+                            <span class="shrink-0 text-xs font-bold text-white bg-red-500 rounded-full px-2 py-0.5">${wordNumber}</span>
+                            <span class="text-xl font-bold text-red-700">${escapeHtml(item.word)}</span>
+                            ${item.pos ? `<span class="shrink-0 text-xs font-bold text-gray-500 bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5">${escapeHtml(item.pos)}</span>` : ''}
+                            <span class="text-gray-600 font-medium">${escapeHtml(item.meaning)}</span>
+                        </div>
+                        ${item.sentence ? `<p class="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 border-l-4 border-l-red-400 text-gray-700 leading-relaxed">${renderMarkedText(item.sentence)}</p>` : ''}
+                        ${item.note ? `<p class="mt-3 text-sm text-gray-600 leading-relaxed">${renderMarkedText(item.note)}</p>` : ''}
+                        ${(item.derivatives.length + item.collocations.length) > 0 ? `
+                        <div class="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                            ${renderEntryRow(item.derivatives, 'derivative')}
+                            ${renderEntryRow(item.collocations, 'collocation')}
+                        </div>` : ''}
+                    `;
+                } else {
+                    card.className = "border-2 border-amber-200 rounded-xl p-4 bg-amber-50";
+                    card.innerHTML = `
+                        <div class="text-xs font-bold text-amber-700 mb-2">🌍 BACKGROUND</div>
+                        <div class="font-bold text-gray-800 mb-2">${renderMarkedText(item.title)}</div>
+                        <p class="text-sm text-gray-700 leading-relaxed">${renderMarkedText(item.note)}</p>
+                    `;
+                }
+
+                listContainer.appendChild(card);
+            });
+
+            showScreen('word-screen');
+        }
+
         // --- [5단계] 챕터 목록 생성 로직 ---
         function renderChapterList() {
             const listContainer = document.getElementById('chapter-list');
@@ -399,7 +966,7 @@
             // 해설 및 다음 버튼 초기화
             const expBox = document.getElementById('explanation-box');
             expBox.classList.add('hidden');
-            expBox.classList.remove('bg-green-100', 'bg-red-100');
+            expBox.classList.remove('bg-green-50', 'bg-red-50', 'border', 'border-green-200', 'border-red-200');
             document.getElementById('next-btn').classList.add('hidden');
         }
 
@@ -424,7 +991,7 @@
                 buttonElement.classList.remove('border-gray-200', 'bg-gray-50', 'opacity-50');
                 buttonElement.classList.add('border-green-500', 'bg-green-50', 'text-green-800');
                 expBox.classList.add('bg-green-50', 'border', 'border-green-200');
-                expText.innerHTML = `<span class="font-bold text-green-700">✅ 정답입니다!</span><br><br>${qData.explanation}`;
+                expText.innerHTML = `<span class="block font-bold text-green-700 mb-2">✅ CORRECT</span>${renderExplanation(qData.explanation)}`;
                 score++;
             } else {
                 buttonElement.classList.remove('border-gray-200', 'bg-gray-50', 'opacity-50');
@@ -435,7 +1002,7 @@
                 buttons[qData.answerIndex].classList.add('border-green-500', 'bg-green-50');
 
                 expBox.classList.add('bg-red-50', 'border', 'border-red-200');
-                expText.innerHTML = `<span class="font-bold text-red-700">❌ 틀렸습니다.</span><br><br>${qData.explanation}`;
+                expText.innerHTML = `<span class="block font-bold text-red-700 mb-2">❌ WRONG</span>${renderExplanation(qData.explanation)}`;
             }
 
             expBox.classList.remove('hidden');
@@ -466,8 +1033,11 @@
             showScreen('result-screen');
         }
 
-        // --- 시작 화면을 보여 주는 동안 퀴즈 파일을 미리 받아 둡니다 ---
-        document.addEventListener('DOMContentLoaded', prefetchQuizzes);
+        // --- 시작 화면을 보여 주는 동안 퀴즈/단어장 파일을 미리 받아 둡니다 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            ensureLatestApp();
+            prefetchLibrary();
+        });
     </script>
 </body>
 </html>
