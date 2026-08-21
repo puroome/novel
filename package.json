@@ -1,0 +1,10 @@
+{
+  "name": "wonder-reading-quiz",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/dev-server.mjs",
+    "manifest": "node scripts/generate-manifest.mjs",
+    "test": "node --test"
+  }
+}
