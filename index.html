@@ -391,7 +391,7 @@
             qData.options.forEach((optText, index) => {
                 const btn = document.createElement('button');
                 btn.className = "w-full text-left bg-gray-50 border-2 border-gray-200 hover:bg-blue-50 hover:border-blue-400 p-4 rounded-lg font-medium text-gray-700 transition duration-200";
-                btn.innerText = `${index + 1}. ${optText}`;
+                btn.innerText = optText;
                 btn.onclick = () => selectOption(index, btn);
                 optionsContainer.appendChild(btn);
             });
