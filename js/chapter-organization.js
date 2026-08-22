@@ -9,33 +9,24 @@ const CATEGORY_ORDER = [
     'Part Eight: August'
 ];
 
-const INSERTED_CHAPTERS = Object.freeze({
-    '80-1': { displayNumber: 81, category: 'Part Five: Justin' },
-    '90-1': { displayNumber: 92, category: 'Part Six: August' },
-    '95-1': { displayNumber: 98, category: 'Part Seven: Miranda' }
-});
-
 export function describeChapter(title, fallbackIndex = 0) {
     const originalTitle = String(title || '').trim();
-    const match = originalTitle.match(/^Chapter\s*(\d+(?:-\d+)?)\s*:\s*(.+)$/i);
+    const match = originalTitle.match(/^Chapter\s*(\d+)\s*:\s*(.+)$/i);
     if (!match) {
         return {
-            oldNumber: null,
+            chapterNumber: null,
             displayNumber: fallbackIndex + 1,
             title: originalTitle,
             category: 'Other'
         };
     }
 
-    const oldNumber = match[1];
-    const numericOldNumber = Number.parseInt(oldNumber, 10);
-    const inserted = INSERTED_CHAPTERS[oldNumber];
-    const displayNumber = inserted?.displayNumber ?? adjustedNumber(numericOldNumber);
+    const chapterNumber = Number.parseInt(match[1], 10);
     return {
-        oldNumber,
-        displayNumber,
+        chapterNumber,
+        displayNumber: chapterNumber,
         title: match[2].trim(),
-        category: inserted?.category ?? categoryForOldNumber(numericOldNumber)
+        category: categoryForChapterNumber(chapterNumber)
     };
 }
 
@@ -67,22 +58,14 @@ export function groupChaptersByCategory(chapters) {
         .sort((left, right) => categoryIndex(left.category) - categoryIndex(right.category));
 }
 
-function adjustedNumber(oldNumber) {
-    if (!Number.isFinite(oldNumber)) return 0;
-    if (oldNumber <= 80) return oldNumber;
-    if (oldNumber <= 90) return oldNumber + 1;
-    if (oldNumber <= 95) return oldNumber + 2;
-    return oldNumber + 3;
-}
-
-function categoryForOldNumber(oldNumber) {
-    if (oldNumber <= 31) return 'Part One: August';
-    if (oldNumber <= 47) return 'Part Two: Via';
-    if (oldNumber <= 53) return 'Part Three: Summer';
-    if (oldNumber <= 73) return 'Part Four: Jack';
-    if (oldNumber <= 80) return 'Part Five: Justin';
-    if (oldNumber <= 90) return 'Part Six: August';
-    if (oldNumber <= 96) return 'Part Seven: Miranda';
+function categoryForChapterNumber(chapterNumber) {
+    if (chapterNumber <= 31) return 'Part One: August';
+    if (chapterNumber <= 47) return 'Part Two: Via';
+    if (chapterNumber <= 53) return 'Part Three: Summer';
+    if (chapterNumber <= 73) return 'Part Four: Jack';
+    if (chapterNumber <= 81) return 'Part Five: Justin';
+    if (chapterNumber <= 92) return 'Part Six: August';
+    if (chapterNumber <= 99) return 'Part Seven: Miranda';
     return 'Part Eight: August';
 }
 

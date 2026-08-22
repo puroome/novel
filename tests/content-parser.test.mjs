@@ -99,3 +99,42 @@ test('배경지식의 의미와 설명을 각각 파싱한다', () => {
     assert.equal(background.meaning, '요술 램프');
     assert.equal(background.note, '소원을 들어주는 램프입니다.');
 });
+
+test('통합 Word 형식의 어휘·뜻·파생어·연어·배경지식을 모두 파싱한다', () => {
+    const markdown = `
+## 📖 Chapter 1: Ordinary
+### 📚 Vocabulary & Expressions (어휘 및 표현)
+* **[V1]**
+  * *문장*: [SENTENCE] Choose [RED: kind]. [/SENTENCE]
+  * *어휘*: **kind**
+  * *품사*: \`a\`
+  * *의미*: 친절한
+  * *파생어*: kindness (n. 친절), kindly (adv. 친절하게)
+  * *연어*: kind person (친절한 사람), kind words (친절한 말)
+
+### 🌍 Background Knowledge (배경지식)
+* **[BG1]**
+  * *제목*: Choose Kind
+  * *의미*: 친절을 선택하라
+  * *설명*: 작품을 관통하는 핵심 태도입니다.
+`;
+    const [chapter] = parseWordFiles([markdown]);
+    const [word, background] = chapter.items;
+
+    assert.equal(chapter.title, 'Chapter 1: Ordinary');
+    assert.equal(word.sentence, '[SENTENCE] Choose [RED: kind]. [/SENTENCE]');
+    assert.equal(word.word, 'kind');
+    assert.equal(word.pos, 'a');
+    assert.equal(word.meaning, '친절한');
+    assert.deepEqual(word.derivatives, [
+        { term: 'kindness', gloss: 'n. 친절' },
+        { term: 'kindly', gloss: 'adv. 친절하게' }
+    ]);
+    assert.deepEqual(word.collocations, [
+        { term: 'kind person', gloss: '친절한 사람' },
+        { term: 'kind words', gloss: '친절한 말' }
+    ]);
+    assert.equal(background.title, 'Choose Kind');
+    assert.equal(background.meaning, '친절을 선택하라');
+    assert.equal(background.note, '작품을 관통하는 핵심 태도입니다.');
+});

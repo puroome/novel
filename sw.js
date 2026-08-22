@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'wonder-reading-shell-v1';
+const CACHE_VERSION = 'wonder-reading-shell-v2';
 const APP_SHELL = [
     './',
     './index.html',
