@@ -7,10 +7,46 @@
     <title>Wonder 독서 퀴즈</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
         body {
             -webkit-user-select: none;
             user-select: none;
             -webkit-touch-callout: none;
+        }
+        #app-container {
+            min-height: 100dvh;
+            max-height: 100dvh;
+            overflow: hidden;
+        }
+        #app-container:not(.hidden) {
+            display: flex;
+            flex-direction: column;
+        }
+        #chapter-screen,
+        #word-chapter-screen,
+        #word-screen {
+            overflow: hidden;
+        }
+        #chapter-screen:not(.hidden),
+        #word-chapter-screen:not(.hidden),
+        #word-screen:not(.hidden),
+        #quiz-screen:not(.hidden),
+        #result-screen:not(.hidden) {
+            display: flex;
+            flex: 1 1 0%;
+            min-height: 0;
+        }
+        #chapter-list,
+        #word-chapter-list,
+        #word-list {
+            flex: 1 1 0%;
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
         }
         img {
             -webkit-user-drag: none;
@@ -23,29 +59,65 @@
         }
     </style>
 </head>
-<body class="bg-blue-50 min-h-screen flex items-center justify-center p-4">
+    <body class="bg-blue-50 min-h-screen flex items-start justify-center p-0">
 
-    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 sm:p-10 fade-in" id="app-container">
+    <section id="login-screen" class="box-border flex min-h-[100dvh] w-full max-w-2xl items-center justify-center bg-white p-6 text-center sm:my-0 sm:min-h-[100dvh] sm:rounded-2xl sm:shadow-xl">
+        <div class="w-full max-w-sm">
+            <img src="assets/wonder.webp" alt="Wonder" draggable="false" class="mx-auto h-28 w-24 rounded-[1.5rem] object-cover shadow-xl ring-4 ring-white">
+            <p class="mt-7 text-xs font-bold uppercase tracking-[0.28em] text-blue-500">Private reading journey</p>
+            <h1 class="mt-2 text-4xl font-black tracking-tight text-slate-900">WONDER</h1>
 
-        <div id="start-screen" class="text-center py-4">
-            <img src="assets/wonder.webp" alt="Wonder" draggable="false" class="h-48 sm:h-56 w-auto mx-auto mb-6 rounded-lg shadow-lg">
-
-            <h1 class="text-3xl sm:text-4xl font-bold text-blue-800 mb-8">WONDER</h1>
-
-            <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button id="word-btn" class="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white text-lg font-bold py-4 px-10 rounded-xl shadow-md hover:shadow-lg transition duration-200">
-                    Word
-                </button>
-                <button id="start-btn" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 px-10 rounded-xl shadow-md hover:shadow-lg transition duration-200">
-                    Quiz
+            <div id="login-intro" class="mt-8">
+                <p class="text-sm leading-relaxed text-slate-500">허용된 Google 계정으로 로그인하면<br>어휘와 퀴즈를 이용할 수 있어요.</p>
+                <button id="google-login-btn" class="mt-6 inline-flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-3 font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+                    <span class="flex h-6 w-6 items-center justify-center rounded-full bg-white text-lg font-bold text-blue-600">G</span>
+                    Google로 계속하기
                 </button>
             </div>
 
-            <p class="text-sm text-gray-500 mt-6 min-h-[1.25rem]" id="start-status"></p>
+            <form id="profile-form" class="mt-8 hidden text-left" novalidate>
+                <p class="text-center text-lg font-bold text-slate-800">처음 오셨군요!</p>
+                <p class="mt-2 text-center text-sm text-slate-500"><span id="profile-email"></span></p>
+                <p class="mt-5 text-center text-sm leading-relaxed text-slate-500">학습 기록을 위해 이름과 학년을 입력해 주세요.</p>
+                <label class="mt-5 block text-sm font-bold text-slate-700" for="profile-name">이름</label>
+                <input id="profile-name" type="text" maxlength="50" autocomplete="name" class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                <label class="mt-4 block text-sm font-bold text-slate-700" for="profile-grade">학년</label>
+                <input id="profile-grade" type="text" maxlength="50" placeholder="예: 중학교 2학년" class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                <button id="profile-submit-btn" type="submit" class="mt-6 w-full rounded-xl bg-blue-600 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60">시작하기</button>
+            </form>
+
+            <p id="login-error" class="mt-5 hidden text-sm font-medium leading-relaxed text-red-600" role="alert"></p>
+        </div>
+    </section>
+
+    <div class="box-border hidden h-[100dvh] w-full max-w-2xl flex-col bg-white p-4 sm:rounded-2xl sm:p-6 sm:shadow-xl fade-in" id="app-container">
+
+        <div id="start-screen" class="flex flex-1 flex-col items-center justify-center py-6 text-center">
+            <div class="w-full max-w-md">
+                <div class="relative mx-auto mb-6 h-36 w-28 sm:h-40 sm:w-32">
+                    <img src="assets/wonder.webp" alt="Wonder" draggable="false" class="relative h-full w-full rounded-[1.7rem] object-cover shadow-xl ring-4 ring-white">
+                </div>
+
+                <p class="mb-2 text-xs font-bold uppercase tracking-[0.28em] text-blue-500">Reading journey</p>
+                <h1 class="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">WONDER</h1>
+
+                <div class="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+                    <button id="word-btn" class="group inline-flex items-center justify-center gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-red-300 hover:bg-red-100 hover:shadow-lg">
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-600 text-xl text-white shadow-md">Aa</span>
+                        <span class="text-lg font-bold">Word</span>
+                    </button>
+                    <button id="start-btn" class="group inline-flex items-center justify-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-blue-300 hover:bg-blue-100 hover:shadow-lg">
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-xl text-white shadow-md">Q</span>
+                        <span class="text-lg font-bold">Quiz</span>
+                    </button>
+                </div>
+
+                <p class="mt-5 min-h-[1.25rem] text-sm text-slate-400" id="start-status"></p>
+            </div>
         </div>
 
-        <div id="chapter-screen" class="hidden">
-            <div class="flex items-center gap-3 mb-6">
+        <div id="chapter-screen" class="hidden flex flex-1 min-h-0 flex-col">
+            <div class="flex items-center gap-3 mb-3">
                 <button data-action="go-start" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-blue-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
@@ -54,11 +126,11 @@
                 </button>
                 <h2 class="flex-1 text-2xl font-bold text-blue-800 text-center pr-12">SELECT A CHAPTER</h2>
             </div>
-            <div id="chapter-list" class="space-y-3 max-h-96 overflow-y-auto pr-2"></div>
+            <div id="chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-2"></div>
         </div>
 
-        <div id="word-chapter-screen" class="hidden">
-            <div class="flex items-center gap-3 mb-6">
+        <div id="word-chapter-screen" class="hidden flex flex-1 min-h-0 flex-col">
+            <div class="flex items-center gap-3 mb-3">
                 <button data-action="go-start" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
@@ -67,13 +139,19 @@
                 </button>
                 <h2 class="flex-1 text-2xl font-bold text-red-700 text-center pr-12">SELECT A CHAPTER</h2>
             </div>
-            <div id="word-chapter-list" class="space-y-3 max-h-96 overflow-y-auto pr-2"></div>
+            <div id="word-chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-2"></div>
         </div>
 
-        <div id="quiz-screen" class="hidden">
+        <div id="quiz-screen" class="hidden flex flex-1 min-h-0 flex-col overflow-y-auto pr-2">
             <div class="flex justify-between items-center gap-3 mb-6 border-b pb-4">
                 <div class="flex items-center gap-3 min-w-0">
-                    <button id="quiz-back-btn" aria-label="챕터 선택으로 돌아가기" title="챕터 선택으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-blue-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                    <button data-action="go-start" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-slate-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
+                        </svg>
+                    </button>
+                    <button id="quiz-back-btn" aria-label="퀴즈 챕터 목록으로 돌아가기" title="퀴즈 챕터 목록으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-blue-600 text-white shadow-md hover:bg-blue-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
                             <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
@@ -102,10 +180,16 @@
             </div>
         </div>
 
-        <div id="word-screen" class="hidden">
-            <div class="flex justify-between items-center gap-3 mb-6 border-b pb-4">
+        <div id="word-screen" class="hidden flex flex-1 min-h-0 flex-col">
+            <div class="flex justify-between items-center gap-3 mb-3 border-b pb-3">
                 <div class="flex items-center gap-3 min-w-0">
-                    <button data-action="go-word-chapters" aria-label="챕터 선택으로 돌아가기" title="챕터 선택으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                    <button data-action="go-start" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-slate-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
+                        </svg>
+                    </button>
+                    <button data-action="go-word-chapters" aria-label="어휘 챕터 목록으로 돌아가기" title="어휘 챕터 목록으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-red-600 text-white shadow-md hover:bg-red-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
                             <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
@@ -116,9 +200,9 @@
                 <span id="word-count-text" class="shrink-0 text-gray-500 font-medium">0 단어</span>
             </div>
 
-            <div id="word-list" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2"></div>
+            <div id="word-list" class="flex-1 min-h-0 space-y-3 overflow-y-auto pr-2"></div>
 
-            <div class="mt-8 flex items-center justify-between">
+            <div class="mt-4 flex items-center justify-between">
                 <button id="word-prev-btn" aria-label="Previous chapter" title="Previous chapter" class="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-red-200 text-red-700 text-2xl font-bold hover:border-red-500 hover:bg-red-50 transition duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-red-200 disabled:hover:bg-transparent">
                     ←
                 </button>
@@ -128,7 +212,7 @@
             </div>
         </div>
 
-        <div id="result-screen" class="hidden text-center py-8">
+        <div id="result-screen" class="hidden flex flex-1 min-h-0 flex-col justify-center overflow-y-auto text-center py-8">
             <h2 class="text-3xl font-bold text-blue-800 mb-4">🎉 챕터 완료!</h2>
             <p class="text-xl text-gray-700 mb-8">총 <span id="total-score" class="font-bold text-blue-600">0</span>문제를 맞혔습니다!</p>
             <button id="result-back-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg transition duration-200">

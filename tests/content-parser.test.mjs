@@ -69,6 +69,42 @@ test('챕터의 마지막 해설은 다음 Chapter 제목 앞에서 끝난다', 
     assert.equal(chapters[1].questions[0].explanation, '두 번째 해설입니다.');
 });
 
+test('문항 안에 정답과 해설을 넣은 퀴즈 형식을 파싱한다', () => {
+    const markdown = `
+## 📖 Chapter 1: One
+* **[Q1]**
+  * *질문*: 첫 번째 질문
+  * ① 정답
+  * ② 오답
+  * *정답*: ①
+  * *해설*: 첫 번째 해설입니다.
+`;
+    const [chapter] = parseQuizFiles([markdown]);
+    const [question] = chapter.questions;
+
+    assert.equal(question.question, '첫 번째 질문');
+    assert.deepEqual(question.options, ['정답', '오답']);
+    assert.equal(question.answerIndex, 0);
+    assert.equal(question.explanation, '첫 번째 해설입니다.');
+});
+
+test('배경지식의 의미와 설명을 각각 파싱한다', () => {
+    const markdown = `
+## 📖 Chapter 1: One
+### 🌍 Background Knowledge
+* **[BG1]**
+  * *제목*: [RED: a magic lamp]
+  * *의미*: 요술 램프
+  * *설명*: 소원을 들어주는 램프입니다.
+`;
+    const [chapter] = parseWordFiles([markdown]);
+    const [background] = chapter.items;
+
+    assert.equal(background.title, '[RED: a magic lamp]');
+    assert.equal(background.meaning, '요술 램프');
+    assert.equal(background.note, '소원을 들어주는 램프입니다.');
+});
+
 function chapterNumbers(chapters) {
     return chapters.map(chapter => Number.parseInt(chapter.title.match(/Chapter\s*(\d+)/i)[1], 10));
 }

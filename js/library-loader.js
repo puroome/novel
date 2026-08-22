@@ -70,6 +70,43 @@ export async function fetchLibrary(options = {}) {
     };
 }
 
+// Google Drive처럼 서버가 파일명과 본문을 한 번에 전달하는 경우에도 같은 파서와
+// 버전 선택 규칙을 사용합니다. 브라우저가 Drive 폴더에 직접 접근하지 않습니다.
+export function buildLibraryFromFiles(remoteFiles, source = 'Google Drive') {
+    const availableCandidates = Array.isArray(remoteFiles)
+        ? remoteFiles.filter(file => typeof file?.name === 'string' && typeof file?.text === 'string'
+            && file.name.toLowerCase().endsWith('.md'))
+        : [];
+
+    if (availableCandidates.length === 0) {
+        throw new Error('Google Drive에서 마크다운(.md) 파일을 찾지 못했습니다.');
+    }
+
+    const selectedNames = selectLatestFiles(availableCandidates.map(file => file.name));
+    const selectedNameSet = new Set(selectedNames.map(name => name.toLocaleLowerCase()));
+    const files = availableCandidates.filter(file => selectedNameSet.has(file.name.toLocaleLowerCase()));
+    const quizFiles = files.filter(file => !isWordFile(file.name));
+    const wordFiles = files.filter(file => isWordFile(file.name));
+    const quizChapters = parseQuizFiles(quizFiles.map(file => file.text));
+    const wordChapters = parseWordFiles(wordFiles.map(file => file.text));
+
+    return {
+        source,
+        sources: [{ label: source, names: availableCandidates.map(file => file.name) }],
+        rawNames: availableCandidates.map(file => file.name),
+        manifestNames: [],
+        fileNames: files.map(file => file.name),
+        listedCount: availableCandidates.length,
+        skipped: [],
+        complete: true,
+        manifestMissing: [],
+        manifestExtra: [],
+        parsingWarnings: validateParsedContent({ quizFiles, wordFiles, quizChapters, wordChapters }),
+        quizChapters,
+        wordChapters
+    };
+}
+
 export async function listQuizFiles(options = {}) {
     const quizDir = options.quizDir || DEFAULT_QUIZ_DIR;
     const fetchImpl = options.fetchImpl || globalThis.fetch?.bind(globalThis);

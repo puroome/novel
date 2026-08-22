@@ -1,11 +1,11 @@
 import { isWordFile } from './content-parser.js';
-import { fetchLibrary as loadLibrary } from './library-loader.js';
+import { initializeNovelAuth } from './auth.js';
 // 퀴즈 마크다운(.md) 파일들이 들어 있는 폴더 이름입니다.
 const QUIZ_DIR = 'quizzes';
 
 // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
 // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-22-t';
+const APP_VERSION = '2026-08-22-v';
 
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;
@@ -32,6 +32,9 @@ let score = 0;
 let allWordChapters = [];       // 단어장(Word) 챕터
 let currentWordChapterIndex = 0;
 let libraryLoadPromise = null;  // 퀴즈/단어장 파일을 미리 받아 두는 작업
+let libraryLoadMode = null;
+let loadAuthorizedLibrary = null;
+let appStarted = false;
 
 // --- [1단계] 화면 전환 로직 ---
 const SCREEN_IDS = ['start-screen', 'chapter-screen', 'quiz-screen', 'result-screen',
@@ -59,15 +62,17 @@ function saveScreenToHistory(screenId, historyMode) {
     window.history[method](createHistoryState(screenId), '', window.location.href);
 }
 
-function showScreen(screenId, { historyMode = 'push' } = {}) {
+function showScreen(screenId, { historyMode = 'push', animate = true } = {}) {
     SCREEN_IDS.forEach(id => document.getElementById(id).classList.add('hidden'));
 
     const screen = document.getElementById(screenId);
     screen.classList.remove('hidden');
-    // 애니메이션 재시작을 위한 트릭
     screen.classList.remove('fade-in');
-    void screen.offsetWidth;
-    screen.classList.add('fade-in');
+    if (animate) {
+        // 애니메이션 재시작을 위한 트릭
+        void screen.offsetWidth;
+        screen.classList.add('fade-in');
+    }
     saveScreenToHistory(screenId, historyMode);
 }
 
@@ -79,9 +84,12 @@ async function restoreHistoryScreen(state) {
         return;
     }
 
-    if (state.screenId !== 'start-screen' && allChapters.length === 0 && allWordChapters.length === 0) {
+    const needsWordLibrary = state.screenId === 'word-chapter-screen' || state.screenId === 'word-screen';
+    const libraryMissing = needsWordLibrary ? allWordChapters.length === 0 : allChapters.length === 0;
+    if (state.screenId !== 'start-screen' && libraryMissing) {
         try {
-            if (!libraryLoadPromise) prefetchLibrary();
+            const requiredMode = needsWordLibrary ? 'word' : 'quiz';
+            if (!libraryLoadPromise || libraryLoadMode !== requiredMode) prefetchLibrary(requiredMode);
             applyLibrary(await libraryLoadPromise);
         } catch (error) {
             console.error('이전 화면 복원 오류:', error);
@@ -134,9 +142,14 @@ async function restoreHistoryScreen(state) {
 
 // 시작 화면이 떠 있는 동안 미리 파일을 받아 둡니다.
 // 그래서 'Quiz'나 'Word'를 누르면 대개 기다림 없이 바로 넘어갑니다.
-function prefetchLibrary() {
-    const promise = loadLibrary();
+function prefetchLibrary(mode) {
+    if (!loadAuthorizedLibrary) {
+        libraryLoadPromise = Promise.reject(new Error('로그인 정보가 준비되지 않았습니다.'));
+        return;
+    }
+    const promise = loadAuthorizedLibrary(mode);
     libraryLoadPromise = promise;
+    libraryLoadMode = mode;
     promise.then(library => {
         if (libraryLoadPromise !== promise) return;
         applyLibrary(library);
@@ -161,7 +174,7 @@ async function openLibrary(mode) {
 
     try {
         // 버튼을 누를 때마다 목록을 새로 읽어, 방금 추가한 파일도 즉시 반영합니다.
-        prefetchLibrary();
+        prefetchLibrary(mode);
         const library = await libraryLoadPromise;
         applyLibrary(library);
 
@@ -204,8 +217,8 @@ async function openLibrary(mode) {
 }
 
 function applyLibrary(library) {
-    allChapters = library.quizChapters;
-    allWordChapters = library.wordChapters;
+    if (library.quizChapters.length > 0) allChapters = library.quizChapters;
+    if (library.wordChapters.length > 0) allWordChapters = library.wordChapters;
 }
 
 function describeLoadError(error, mode) {
@@ -287,9 +300,9 @@ function renderWordChapterList() {
         const countLabel = bgCount > 0 ? `${wordCount} 단어 · ${bgCount} 배경` : `${wordCount} 단어`;
 
         const btn = document.createElement('button');
-        btn.className = "w-full text-left bg-white border-2 border-red-100 hover:border-red-500 hover:bg-red-50 p-4 rounded-xl transition duration-200 flex justify-between items-center gap-3 group";
+        btn.className = "w-full text-left bg-white border-2 border-red-100 hover:border-red-500 hover:bg-red-50 p-3 rounded-xl transition duration-200 flex justify-between items-center gap-3 group";
         btn.innerHTML = `
-            <span class="font-bold text-gray-800 group-hover:text-red-700">${escapeHtml(chapter.title)}</span>
+            <span class="font-bold text-gray-800 group-hover:text-red-700">${formatChapterListLabel(chapter.title, index)}</span>
             <span class="shrink-0 text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${countLabel}</span>
         `;
         btn.onclick = () => startWordChapter(index);
@@ -317,7 +330,7 @@ function renderEntryRow(entries, kind) {
 }
 
 // --- [6-2단계] 단어 학습장 그리기 ---
-function startWordChapter(index, { historyMode = 'push' } = {}) {
+function startWordChapter(index, { historyMode = 'push', animate = true } = {}) {
     currentWordChapterIndex = index;
     const chapter = allWordChapters[index];
     const wordCount = chapter.items.filter(item => item.type === 'word').length;
@@ -355,8 +368,9 @@ function startWordChapter(index, { historyMode = 'push' } = {}) {
         } else {
             card.className = "border-2 border-amber-200 rounded-xl p-4 bg-amber-50";
             card.innerHTML = `
-                <div class="font-bold text-gray-800 mb-2">${renderMarkedText(item.title)}</div>
-                <p class="text-sm text-gray-700 leading-relaxed">${renderMarkedText(item.note)}</p>
+                <div class="font-bold text-gray-800">${renderMarkedText(item.title)}</div>
+                ${item.meaning ? `<p class="mt-2 text-sm font-semibold text-amber-900"><span class="mr-1.5 rounded bg-amber-200 px-1.5 py-0.5 text-xs font-bold text-amber-900">의미</span>${renderMarkedText(item.meaning)}</p>` : ''}
+                ${item.note ? `<p class="mt-3 border-t border-amber-200 pt-3 text-sm text-gray-700 leading-relaxed">${renderMarkedText(item.note)}</p>` : ''}
             `;
         }
 
@@ -364,13 +378,13 @@ function startWordChapter(index, { historyMode = 'push' } = {}) {
     });
 
     updateWordChapterNavigation();
-    showScreen('word-screen', { historyMode });
+    showScreen('word-screen', { historyMode, animate });
 }
 
 function moveWordChapter(direction) {
     const targetIndex = currentWordChapterIndex + direction;
     if (targetIndex < 0 || targetIndex >= allWordChapters.length) return;
-    startWordChapter(targetIndex);
+    startWordChapter(targetIndex, { animate: false });
 }
 
 function updateWordChapterNavigation() {
@@ -398,14 +412,23 @@ function renderChapterList() {
 
     allChapters.forEach((chapter, index) => {
         const btn = document.createElement('button');
-        btn.className = "w-full text-left bg-white border-2 border-blue-100 hover:border-blue-500 hover:bg-blue-50 p-4 rounded-xl transition duration-200 flex justify-between items-center group";
+        btn.className = "w-full text-left bg-white border-2 border-blue-100 hover:border-blue-500 hover:bg-blue-50 p-3 rounded-xl transition duration-200 flex justify-between items-center group";
         btn.innerHTML = `
-            <span class="font-bold text-gray-800 group-hover:text-blue-700">${escapeHtml(chapter.title)}</span>
+            <span class="font-bold text-gray-800 group-hover:text-blue-700">${formatChapterListLabel(chapter.title, index)}</span>
             <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${chapter.questions.length} 문제</span>
         `;
         btn.onclick = () => startChapter(index);
         listContainer.appendChild(btn);
     });
+}
+
+function formatChapterListLabel(title, fallbackIndex) {
+    const originalTitle = String(title);
+    const compactTitle = originalTitle.replace(/^\s*Chapter\s*(\d+)\s*:\s*/i, '$1. ');
+    if (compactTitle !== originalTitle) return compactTitle;
+
+    const number = originalTitle.match(/Chapter\s*(\d+)/i)?.[1];
+    return number ? `${number}.` : `${fallbackIndex + 1}. ${originalTitle}`;
 }
 
 // --- [6단계] 퀴즈 실행 로직 ---
@@ -424,7 +447,7 @@ function loadQuestion({ syncHistory = true } = {}) {
     const qData = chapter.questions[currentQuestionIndex];
 
     document.getElementById('progress-text').innerText = `${currentQuestionIndex + 1} / ${chapter.questions.length}`;
-    document.getElementById('question-id').innerText = `[${qData.id}]`;
+    document.getElementById('question-id').innerText = '❓';
     document.getElementById('question-text').innerText = qData.question;
 
     const optionsContainer = document.getElementById('options-container');
@@ -544,7 +567,10 @@ function continueToNextChapter() {
 }
 
 // --- 시작 화면을 보여 주는 동안 퀴즈/단어장 파일을 미리 받아 둡니다 ---
-document.addEventListener('DOMContentLoaded', () => {
+export function startReadingApp({ loadLibrary }) {
+    if (appStarted) return;
+    appStarted = true;
+    loadAuthorizedLibrary = loadLibrary;
     window.history.replaceState(createHistoryState('start-screen'), '', window.location.href);
     window.addEventListener('popstate', event => restoreHistoryScreen(event.state));
     document.getElementById('start-btn').addEventListener('click', startQuiz);
@@ -566,5 +592,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('contextmenu', event => event.preventDefault());
     document.addEventListener('keydown', handleWordChapterArrowKeys);
     ensureLatestApp();
-    prefetchLibrary();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initializeNovelAuth({ startReadingApp });
 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { fetchLibrary } from '../js/library-loader.js';
+import { buildLibraryFromFiles, fetchLibrary } from '../js/library-loader.js';
 
 const projectRoot = new URL('../', import.meta.url);
 
@@ -147,6 +147,24 @@ test('localhost 폴더 목록이 20개에서 잘려도 manifest를 보완해 Wor
     assert.equal(library.wordChapters.length, expectedLastWordChapter);
     assert.match(library.wordChapters.at(-1).title, new RegExp(`Chapter ${expectedLastWordChapter}:`));
     assert.equal(library.source, '폴더 목록 + manifest.json');
+});
+
+test('Apps Script가 전달한 Google Drive Markdown도 최신 버전만 파싱한다', () => {
+    const files = [
+        {
+            name: 'wonder-quiz-chapters-1-5-v1.md',
+            text: '## 📖 Chapter 1: Ordinary\n[Q1] 질문\n① 정답\n② 오답\n\n## 🔑 정답 및 해설\n* **[Q1] 정답: ①**\n  * *해설*: 해설'
+        },
+        {
+            name: 'wonder-quiz-chapters-1-5-v2.md',
+            text: '## 📖 Chapter 1: Ordinary\n[Q1] 최신 질문\n① 정답\n② 오답\n\n## 🔑 정답 및 해설\n* **[Q1] 정답: ①**\n  * *해설*: 최신 해설'
+        }
+    ];
+
+    const library = buildLibraryFromFiles(files);
+    assert.deepEqual(library.fileNames, ['wonder-quiz-chapters-1-5-v2.md']);
+    assert.equal(library.source, 'Google Drive');
+    assert.equal(library.quizChapters[0].questions[0].question, '최신 질문');
 });
 
 function contentType(fileName) {

@@ -70,24 +70,30 @@ export function parseQuizFiles(fileContents) {
 
             for (let questionIndex = 1; questionIndex < questionBlocks.length; questionIndex += 2) {
                 const id = questionBlocks[questionIndex];
-                const lines = (questionBlocks[questionIndex + 1] || '').trim().split(/\r?\n/);
+                const questionBlock = questionBlocks[questionIndex + 1] || '';
+                const lines = questionBlock.trim().split(/\r?\n/);
                 const questionLines = [];
                 const options = [];
+                const inlineQuestion = cleanInline(pickSingleLineField(questionBlock, '질문'));
 
                 for (const rawLine of lines) {
-                    const line = rawLine.trim();
+                    const line = rawLine.trim().replace(/^(?:[-*+]\s+)/, '');
                     if (/^[①②③④⑤]/.test(line)) options.push(line.slice(1).trim());
-                    else if (line) questionLines.push(line);
+                    else if (line && !inlineQuestion) questionLines.push(line);
                 }
 
                 if (options.length === 0) continue;
+                const inlineAnswerSymbol = findInlineAnswerSymbol(questionBlock);
+                const inlineExplanation = pickSingleLineField(questionBlock, '해설');
                 const answer = answers.get(id);
                 questions.push({
                     id,
-                    question: questionLines.join(' '),
+                    question: inlineQuestion || questionLines.join(' '),
                     options,
-                    answerIndex: answer?.answerIndex ?? null,
-                    explanation: answer?.explanation || '정답 정보를 찾을 수 없습니다.'
+                    answerIndex: inlineAnswerSymbol === undefined
+                        ? (answer?.answerIndex ?? null)
+                        : CIRCLE_TO_INDEX[inlineAnswerSymbol],
+                    explanation: inlineExplanation || answer?.explanation || '정답 정보를 찾을 수 없습니다.'
                 });
             }
 
@@ -138,6 +144,7 @@ export function parseWordFiles(fileContents) {
                         type: 'background',
                         id,
                         title: inlineTitle || pickField(chunk, '제목'),
+                        meaning: cleanInline(pickField(chunk, '의미')),
                         note: pickField(chunk, '설명')
                     });
                 }
@@ -211,6 +218,21 @@ function parseAnswers(answerPart) {
     }
 
     return answers;
+}
+
+function findInlineAnswerSymbol(block) {
+    const match = String(block).match(
+        /(?:^|\n)\s*(?:[-*+]\s*)?(?:\*{1,2}\s*)?(?:정답|답)(?:\s*\*{1,2})?\s*:\s*([①②③④⑤])/m
+    );
+    return match?.[1];
+}
+
+function pickSingleLineField(block, label) {
+    const pattern = new RegExp(
+        `(?:^|\\n)\\s*(?:[-*+]\\s*)?\\*?\\s*${escapeRegExp(label)}\\s*\\*?\\s*:\\s*([^\\r\\n]*)`,
+        'i'
+    );
+    return String(block).match(pattern)?.[1]?.trim() || '';
 }
 
 function cleanChapterTitle(title) {
