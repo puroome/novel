@@ -1,9 +1,14 @@
 import { isWordFile } from './content-parser.js';
 import { initializeNovelAuth } from './auth.js';
+import {
+    formatDisplayChapterTitle,
+    groupChaptersByCategory,
+    sortChaptersForDisplay
+} from './chapter-organization.js';
 
 // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
 // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-22-z';
+const APP_VERSION = '2026-08-22-aa';
 
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;
@@ -215,8 +220,8 @@ async function openLibrary(mode) {
 }
 
 function applyLibrary(library) {
-    if (library.quizChapters.length > 0) allChapters = library.quizChapters;
-    if (library.wordChapters.length > 0) allWordChapters = library.wordChapters;
+    if (library.quizChapters.length > 0) allChapters = sortChaptersForDisplay(library.quizChapters);
+    if (library.wordChapters.length > 0) allWordChapters = sortChaptersForDisplay(library.wordChapters);
 }
 
 function describeLoadError(error, mode) {
@@ -289,22 +294,16 @@ function renderMarkedText(text) {
 
 // --- [5-2단계] 단어장 챕터 목록 ---
 function renderWordChapterList() {
-    const listContainer = document.getElementById('word-chapter-list');
-    listContainer.innerHTML = '';
-
-    allWordChapters.forEach((chapter, index) => {
-        const wordCount = chapter.items.filter(item => item.type === 'word').length;
-        const bgCount = chapter.items.length - wordCount;
-        const countLabel = bgCount > 0 ? `${wordCount} 단어 · ${bgCount} 배경` : `${wordCount} 단어`;
-
-        const btn = document.createElement('button');
-        btn.className = "w-full text-left bg-white border-2 border-red-100 hover:border-red-500 hover:bg-red-50 p-3 rounded-xl transition duration-200 flex justify-between items-center gap-3 group";
-        btn.innerHTML = `
-            <span class="font-bold text-gray-800 group-hover:text-red-700">${formatChapterListLabel(chapter.title, index)}</span>
-            <span class="shrink-0 text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${countLabel}</span>
-        `;
-        btn.onclick = () => startWordChapter(index);
-        listContainer.appendChild(btn);
+    renderGroupedChapterList({
+        container: document.getElementById('word-chapter-list'),
+        chapters: allWordChapters,
+        theme: 'word',
+        onSelect: index => startWordChapter(index),
+        getCountLabel: chapter => {
+            const wordCount = chapter.items.filter(item => item.type === 'word').length;
+            const bgCount = chapter.items.length - wordCount;
+            return bgCount > 0 ? `${wordCount} 단어 · ${bgCount} 배경` : `${wordCount} 단어`;
+        }
     });
 }
 
@@ -405,28 +404,77 @@ function handleWordChapterArrowKeys(event) {
 
 // --- [5단계] 챕터 목록 생성 로직 ---
 function renderChapterList() {
-    const listContainer = document.getElementById('chapter-list');
-    listContainer.innerHTML = ''; // 기존 목록 초기화
-
-    allChapters.forEach((chapter, index) => {
-        const btn = document.createElement('button');
-        btn.className = "w-full text-left bg-white border-2 border-blue-100 hover:border-blue-500 hover:bg-blue-50 p-3 rounded-xl transition duration-200 flex justify-between items-center group";
-        btn.innerHTML = `
-            <span class="font-bold text-gray-800 group-hover:text-blue-700">${formatChapterListLabel(chapter.title, index)}</span>
-            <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${chapter.questions.length} 문제</span>
-        `;
-        btn.onclick = () => startChapter(index);
-        listContainer.appendChild(btn);
+    renderGroupedChapterList({
+        container: document.getElementById('chapter-list'),
+        chapters: allChapters,
+        theme: 'quiz',
+        onSelect: index => startChapter(index),
+        getCountLabel: chapter => `${chapter.questions.length} 문제`
     });
 }
 
 function formatChapterListLabel(title, fallbackIndex) {
-    const originalTitle = String(title);
-    const compactTitle = originalTitle.replace(/^\s*Chapter\s*(\d+)\s*:\s*/i, '$1. ');
-    if (compactTitle !== originalTitle) return compactTitle;
+    return formatDisplayChapterTitle(title, fallbackIndex);
+}
 
-    const number = originalTitle.match(/Chapter\s*(\d+)/i)?.[1];
-    return number ? `${number}.` : `${fallbackIndex + 1}. ${originalTitle}`;
+function renderGroupedChapterList({ container, chapters, theme, onSelect, getCountLabel }) {
+    container.innerHTML = '';
+    const styles = theme === 'word'
+        ? {
+            group: 'border-red-100 bg-red-50 hover:border-red-300 hover:bg-red-100',
+            heading: 'text-red-800',
+            chevron: 'text-red-500',
+            chapter: 'border-red-100 hover:border-red-500 hover:bg-red-50',
+            chapterText: 'group-hover:text-red-700'
+        }
+        : {
+            group: 'border-blue-100 bg-blue-50 hover:border-blue-300 hover:bg-blue-100',
+            heading: 'text-blue-800',
+            chevron: 'text-blue-500',
+            chapter: 'border-blue-100 hover:border-blue-500 hover:bg-blue-50',
+            chapterText: 'group-hover:text-blue-700'
+        };
+
+    groupChaptersByCategory(chapters).forEach(group => {
+        const section = document.createElement('section');
+        section.className = 'space-y-2';
+
+        const groupButton = document.createElement('button');
+        groupButton.type = 'button';
+        groupButton.className = `w-full rounded-xl border-2 ${styles.group} px-4 py-3 text-left transition duration-200 flex items-center justify-between gap-3`;
+        groupButton.setAttribute('aria-expanded', 'false');
+        groupButton.innerHTML = `
+            <span class="font-bold ${styles.heading}">${escapeHtml(group.category)}</span>
+            <span class="flex items-center gap-2 text-sm text-gray-500">
+                <span class="rounded-full bg-white/80 px-3 py-1">${group.entries.length} 챕터</span>
+                <svg class="h-4 w-4 shrink-0 transition-transform ${styles.chevron}" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.09 1.03l-4.25 4.5a.75.75 0 0 1-1.09 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" /></svg>
+            </span>
+        `;
+
+        const chapterPanel = document.createElement('div');
+        chapterPanel.className = 'hidden space-y-2 pl-2';
+        const chevron = groupButton.querySelector('svg');
+        groupButton.addEventListener('click', () => {
+            const opening = chapterPanel.classList.contains('hidden');
+            chapterPanel.classList.toggle('hidden', !opening);
+            groupButton.setAttribute('aria-expanded', String(opening));
+            chevron.classList.toggle('rotate-180', opening);
+        });
+
+        group.entries.forEach(({ chapter, index }) => {
+            const chapterButton = document.createElement('button');
+            chapterButton.className = `w-full text-left bg-white border-2 ${styles.chapter} p-3 rounded-xl transition duration-200 flex justify-between items-center gap-3 group`;
+            chapterButton.innerHTML = `
+                <span class="font-bold text-gray-800 ${styles.chapterText}">${escapeHtml(formatChapterListLabel(chapter.title, index))}</span>
+                <span class="shrink-0 text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${escapeHtml(getCountLabel(chapter))}</span>
+            `;
+            chapterButton.addEventListener('click', () => onSelect(index));
+            chapterPanel.appendChild(chapterButton);
+        });
+
+        section.append(groupButton, chapterPanel);
+        container.appendChild(section);
+    });
 }
 
 // --- [6단계] 퀴즈 실행 로직 ---

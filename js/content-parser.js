@@ -65,7 +65,14 @@ export function parseQuizFiles(fileContents) {
         for (let index = 1; index < chapterBlocks.length; index += 2) {
             const title = cleanChapterTitle(chapterBlocks[index]);
             const body = chapterBlocks[index + 1] || '';
-            const questionBlocks = body.split(/\[(Q\d+)\]/);
+            // Older files label questions as "[Q1]", while newer files use
+            // Markdown emphasis such as "* **Q1**".  Normalize the latter so
+            // both styles go through the same parsing path.
+            const normalizedBody = body.replace(
+                /(^|\n)\s*(?:[-*+]\s*)?\*{1,3}\s*(Q\d+)\s*\*{1,3}\s*(?=\r?\n|$)/gi,
+                '$1[$2]'
+            );
+            const questionBlocks = normalizedBody.split(/\[(Q\d+)\]/i);
             const questions = [];
 
             for (let questionIndex = 1; questionIndex < questionBlocks.length; questionIndex += 2) {

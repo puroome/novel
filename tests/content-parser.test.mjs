@@ -62,6 +62,27 @@ test('문항 안에 정답과 해설을 넣은 퀴즈 형식을 파싱한다', (
     assert.equal(question.explanation, '첫 번째 해설입니다.');
 });
 
+test('대괄호 없이 강조한 Q 번호의 새 퀴즈 형식을 파싱한다', () => {
+    const markdown = `
+## 📖 Chapter 81: North Pole
+* **Q1**
+  * *질문*: 새 형식의 첫 번째 질문
+  * ① 정답
+  * ② 오답
+  * *정답*: ①
+  * *해설*: 새 형식의 해설입니다.
+`;
+    const [chapter] = parseQuizFiles([markdown]);
+    const [question] = chapter.questions;
+
+    assert.equal(chapter.title, 'Chapter 81: North Pole');
+    assert.equal(question.id, 'Q1');
+    assert.equal(question.question, '새 형식의 첫 번째 질문');
+    assert.deepEqual(question.options, ['정답', '오답']);
+    assert.equal(question.answerIndex, 0);
+    assert.equal(question.explanation, '새 형식의 해설입니다.');
+});
+
 test('배경지식의 의미와 설명을 각각 파싱한다', () => {
     const markdown = `
 ## 📖 Chapter 1: One
