@@ -8,10 +8,16 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import { config } from './config.js';
 import { buildLibraryFromFiles } from './library-loader.js';
+import {
+    clearLibraryCache,
+    readLibraryCache,
+    saveLibraryCache
+} from './library-cache.js';
 
 let auth = null;
 let approvedUser = null;
 const libraryPromises = new Map();
+const libraryManifestPromises = new Map();
 
 function getElement(id) {
     return document.getElementById(id);
@@ -75,16 +81,24 @@ function revealApp(user, startReadingApp) {
     approvedUser = user;
     getElement('login-screen').classList.add('hidden');
     getElement('app-container').classList.remove('hidden');
-    startReadingApp({ loadLibrary: loadSecureLibrary });
+    startReadingApp({ loadLibrary: loadSecureLibrary, prepareLibraryCache });
 }
 
 async function loadSecureLibrary(kind) {
     const normalizedKind = kind === 'word' ? 'word' : 'quiz';
     if (!libraryPromises.has(normalizedKind)) {
-        // 현재 열린 페이지 안에서는 재사용하지만, 새로고침하면 Drive에서 최신 파일을
-        // 다시 받습니다. 자료를 추가한 뒤 즉시 반영할 수 있도록 영구 저장소는 쓰지 않습니다.
-        const promise = callScript('library', { kind: normalizedKind })
-            .then(data => buildLibraryFromFiles(data.files, 'Google Drive'));
+        const promise = getLibraryManifest(normalizedKind).then(manifest => {
+            const cached = readLibraryCache(normalizedKind);
+            if (cached?.signature === manifest.signature) {
+                return buildLibraryFromFiles(cached.files, '이 기기의 캐시');
+            }
+
+            // 파일을 추가·삭제·수정하면 서명값이 달라집니다. 이때만 원문을 다시 받습니다.
+            return callScript('library', { kind: normalizedKind }).then(data => {
+                saveLibraryCache(normalizedKind, { signature: manifest.signature, files: data.files });
+                return buildLibraryFromFiles(data.files, 'Google Drive');
+            });
+        });
 
         libraryPromises.set(normalizedKind, promise.catch(error => {
             libraryPromises.delete(normalizedKind);
@@ -92,6 +106,32 @@ async function loadSecureLibrary(kind) {
         }));
     }
     return libraryPromises.get(normalizedKind);
+}
+
+function getLibraryManifest(kind) {
+    const normalizedKind = kind === 'word' ? 'word' : 'quiz';
+    if (!libraryManifestPromises.has(normalizedKind)) {
+        const promise = callScript('library_manifest', { kind: normalizedKind })
+            .then(data => {
+                if (typeof data.signature !== 'string' || !data.signature) {
+                    throw new Error('자료 목록의 변경 정보를 확인하지 못했습니다.');
+                }
+                return data;
+            });
+        libraryManifestPromises.set(normalizedKind, promise.catch(error => {
+            libraryManifestPromises.delete(normalizedKind);
+            throw error;
+        }));
+    }
+    return libraryManifestPromises.get(normalizedKind);
+}
+
+async function prepareLibraryCache() {
+    await Promise.all(['quiz', 'word'].map(async kind => {
+        const manifest = await getLibraryManifest(kind);
+        const cached = readLibraryCache(kind);
+        if (cached && cached.signature !== manifest.signature) clearLibraryCache(kind);
+    }));
 }
 
 async function handleAuthenticatedUser(user, startReadingApp) {
@@ -170,6 +210,7 @@ export function initializeNovelAuth({ startReadingApp }) {
 
     onAuthStateChanged(auth, async user => {
         libraryPromises.clear();
+        libraryManifestPromises.clear();
         if (!user) {
             approvedUser = null;
             getElement('app-container').classList.add('hidden');

@@ -63,6 +63,11 @@ function doGet(e) {
         requireCompletedProfile(user);
         result = { success: true, files: readMarkdownLibrary(e.parameter.kind) };
         break;
+      case 'library_manifest':
+        const manifestUser = requireApprovedUser(account.email);
+        requireCompletedProfile(manifestUser);
+        result = { success: true, ...readMarkdownLibraryManifest(e.parameter.kind) };
+        break;
       default:
         throw new Error('지원하지 않는 요청입니다.');
     }
@@ -203,6 +208,40 @@ function findSheetUser(email) {
 }
 
 function readMarkdownLibrary(kind) {
+  const files = listMarkdownFiles(kind);
+  return files.map(file => ({
+    name: file.name,
+    text: file.driveFile.getBlob().getDataAsString('UTF-8'),
+  }));
+}
+
+// 파일 이름·수정 시각·크기·MD5를 조합한 서명입니다. MD 원문을 내려받지 않고도
+// 파일의 추가·삭제·수정을 확인할 수 있습니다.
+function readMarkdownLibraryManifest(kind) {
+  const files = listMarkdownFiles(kind);
+  const entries = files.map(file => {
+    let checksum = '';
+    try {
+      checksum = file.driveFile.getMd5Checksum() || '';
+    } catch (error) {
+      // 일부 Drive 파일은 MD5를 제공하지 않습니다. 수정 시각과 크기로도 확인합니다.
+    }
+    return {
+      name: file.name,
+      updatedAt: file.driveFile.getLastUpdated().getTime(),
+      size: file.driveFile.getSize(),
+      checksum,
+    };
+  });
+
+  return {
+    kind: String(kind || '').trim().toLowerCase(),
+    fileCount: entries.length,
+    signature: JSON.stringify(entries),
+  };
+}
+
+function listMarkdownFiles(kind) {
   const normalizedKind = String(kind || '').trim().toLowerCase();
   if (normalizedKind !== 'quiz' && normalizedKind !== 'word') {
     throw new Error('읽을 자료 종류가 올바르지 않습니다.');
@@ -218,7 +257,7 @@ function readMarkdownLibrary(kind) {
     if (!/\.md$/i.test(name)) continue;
     const isWordFile = /(?:^|[-_ ])words?(?:[-_ ]|$)/i.test(name);
     if ((normalizedKind === 'word') !== isWordFile) continue;
-    files.push({ name, text: file.getBlob().getDataAsString('UTF-8') });
+    files.push({ name, driveFile: file });
   }
 
   files.sort((left, right) => left.name.localeCompare(right.name));

@@ -1,6 +1,7 @@
 import { isWordFile } from './content-parser.js';
 import { initializeNovelAuth } from './auth.js';
 import {
+    describeChapter,
     formatDisplayChapterTitle,
     groupChaptersByCategory,
     sortChaptersForDisplay
@@ -8,7 +9,7 @@ import {
 
 // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
 // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-22-aa';
+const APP_VERSION = '2026-08-22-ag';
 
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;
@@ -425,14 +426,24 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
             heading: 'text-red-800',
             chevron: 'text-red-500',
             chapter: 'border-red-100 hover:border-red-500 hover:bg-red-50',
-            chapterText: 'group-hover:text-red-700'
+            chapterText: 'group-hover:text-red-700',
+            partBadge: 'bg-red-600 text-white shadow-sm',
+            separator: 'border-red-200',
+            role: 'text-red-500',
+            chapterNumber: 'bg-red-100 text-red-700 group-hover:bg-red-600 group-hover:text-white',
+            chapterSeparator: 'border-red-100 group-hover:border-red-200'
         }
         : {
             group: 'border-blue-100 bg-blue-50 hover:border-blue-300 hover:bg-blue-100',
             heading: 'text-blue-800',
             chevron: 'text-blue-500',
             chapter: 'border-blue-100 hover:border-blue-500 hover:bg-blue-50',
-            chapterText: 'group-hover:text-blue-700'
+            chapterText: 'group-hover:text-blue-700',
+            partBadge: 'bg-blue-600 text-white shadow-sm',
+            separator: 'border-blue-200',
+            role: 'text-blue-500',
+            chapterNumber: 'bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white',
+            chapterSeparator: 'border-blue-100 group-hover:border-blue-200'
         };
 
     groupChaptersByCategory(chapters).forEach(group => {
@@ -443,8 +454,15 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
         groupButton.type = 'button';
         groupButton.className = `w-full rounded-xl border-2 ${styles.group} px-4 py-3 text-left transition duration-200 flex items-center justify-between gap-3`;
         groupButton.setAttribute('aria-expanded', 'false');
+        const category = splitCategoryLabel(group.category);
         groupButton.innerHTML = `
-            <span class="font-bold ${styles.heading}">${escapeHtml(group.category)}</span>
+            <span class="flex min-w-0 items-center gap-3">
+                <span class="inline-flex w-[6.75rem] shrink-0 justify-center rounded-lg px-1 py-1.5 text-[10px] font-extrabold tracking-[0.12em] ${styles.partBadge}">${escapeHtml(category.part.toUpperCase())}</span>
+                <span class="min-w-0 border-l pl-3 ${styles.separator}">
+                    <span class="block text-[10px] font-bold uppercase tracking-[0.16em] ${styles.role}">Narrator</span>
+                    <span class="block truncate text-base font-extrabold ${styles.heading}">${escapeHtml(category.title)}</span>
+                </span>
+            </span>
             <span class="flex items-center gap-2 text-sm text-gray-500">
                 <span class="rounded-full bg-white/80 px-3 py-1">${group.entries.length} 챕터</span>
                 <svg class="h-4 w-4 shrink-0 transition-transform ${styles.chevron}" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.09 1.03l-4.25 4.5a.75.75 0 0 1-1.09 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" /></svg>
@@ -461,11 +479,15 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
             chevron.classList.toggle('rotate-180', opening);
         });
 
-        group.entries.forEach(({ chapter, index }) => {
+        group.entries.forEach(({ chapter, index, info }) => {
+            const chapterInfo = info || describeChapter(chapter.title, index);
             const chapterButton = document.createElement('button');
-            chapterButton.className = `w-full text-left bg-white border-2 ${styles.chapter} p-3 rounded-xl transition duration-200 flex justify-between items-center gap-3 group`;
+            chapterButton.className = `w-full text-left bg-white border-2 ${styles.chapter} px-3 py-2.5 rounded-xl transition duration-200 flex justify-between items-center gap-3 group`;
             chapterButton.innerHTML = `
-                <span class="font-bold text-gray-800 ${styles.chapterText}">${escapeHtml(formatChapterListLabel(chapter.title, index))}</span>
+                <span class="flex min-w-0 items-center gap-3">
+                    <span class="inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg px-1 text-sm font-extrabold transition-colors ${styles.chapterNumber}">${chapterInfo.displayNumber}</span>
+                    <span class="min-w-0 border-l pl-3 text-base font-bold text-gray-800 transition-colors ${styles.chapterSeparator} ${styles.chapterText}">${escapeHtml(chapterInfo.title)}</span>
+                </span>
                 <span class="shrink-0 text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${escapeHtml(getCountLabel(chapter))}</span>
             `;
             chapterButton.addEventListener('click', () => onSelect(index));
@@ -475,6 +497,13 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
         section.append(groupButton, chapterPanel);
         container.appendChild(section);
     });
+}
+
+function splitCategoryLabel(category) {
+    const match = String(category).match(/^(Part\s+\w+)\s*:\s*(.+)$/i);
+    return match
+        ? { part: match[1], title: match[2] }
+        : { part: 'Part', title: String(category) };
 }
 
 // --- [6단계] 퀴즈 실행 로직 ---
@@ -613,11 +642,12 @@ function continueToNextChapter() {
 }
 
 // --- 시작 화면을 보여 주는 동안 퀴즈/단어장 파일을 미리 받아 둡니다 ---
-export function startReadingApp({ loadLibrary }) {
+export function startReadingApp({ loadLibrary, prepareLibraryCache }) {
     if (appStarted) {
         closeContinueModal();
         document.getElementById('start-status').innerText = '';
         showScreen('start-screen', { historyMode: 'replace' });
+        prepareLibraryCache?.().catch(error => console.warn('기기 캐시 확인 오류:', error));
         return;
     }
     appStarted = true;
@@ -643,6 +673,9 @@ export function startReadingApp({ loadLibrary }) {
     document.addEventListener('contextmenu', event => event.preventDefault());
     document.addEventListener('keydown', handleWordChapterArrowKeys);
     ensureLatestApp();
+    // 로그인 직후에는 가벼운 파일 목록만 확인합니다. 변함이 없다면 버튼을 눌렀을 때
+    // Drive 원문 대신 이 기기에 보관한 MD 파일을 즉시 사용합니다.
+    prepareLibraryCache?.().catch(error => console.warn('기기 캐시 확인 오류:', error));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
