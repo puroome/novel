@@ -50,6 +50,7 @@ async function callScript(action, params = {}) {
 
 function showProfileForm(user) {
     getElement('login-intro').classList.add('hidden');
+    getElement('pending-status').classList.add('hidden');
     getElement('profile-form').classList.remove('hidden');
     getElement('profile-email').textContent = user.email;
     getElement('profile-name').value = user.name || '';
@@ -59,7 +60,15 @@ function showProfileForm(user) {
 
 function showLoginIntro() {
     getElement('profile-form').classList.add('hidden');
+    getElement('pending-status').classList.add('hidden');
     getElement('login-intro').classList.remove('hidden');
+}
+
+function showPendingStatus(user) {
+    getElement('login-intro').classList.add('hidden');
+    getElement('profile-form').classList.add('hidden');
+    getElement('pending-email').textContent = user.email;
+    getElement('pending-status').classList.remove('hidden');
 }
 
 function revealApp(user, startReadingApp) {
@@ -83,6 +92,26 @@ async function loadSecureLibrary(kind) {
         }));
     }
     return libraryPromises.get(normalizedKind);
+}
+
+async function handleAuthenticatedUser(user, startReadingApp) {
+    setLoginError();
+    try {
+        const response = await callScript('session');
+        if (response.status === 'approved') {
+            revealApp(response.user, startReadingApp);
+        } else if (response.status === 'pending') {
+            showPendingStatus(response.user);
+        } else if (response.status === 'request') {
+            showProfileForm(response.user);
+        } else {
+            throw new Error('권한 상태를 확인하지 못했습니다.');
+        }
+    } catch (error) {
+        console.error('접근 권한 확인 오류:', error);
+        setLoginError(error.message || '접근 권한을 확인하지 못했습니다.');
+        await signOut(auth);
+    }
 }
 
 export function initializeNovelAuth({ startReadingApp }) {
@@ -124,14 +153,20 @@ export function initializeNovelAuth({ startReadingApp }) {
         const submitButton = getElement('profile-submit-btn');
         submitButton.disabled = true;
         try {
-            const response = await callScript('save_profile', { name, grade });
-            revealApp(response.user, startReadingApp);
+            const response = await callScript('request_access', { name, grade });
+            showPendingStatus(response.user);
         } catch (error) {
             setLoginError(error.message);
         } finally {
             submitButton.disabled = false;
         }
     });
+
+    getElement('pending-retry-btn').addEventListener('click', async () => {
+        if (auth.currentUser) await handleAuthenticatedUser(auth.currentUser, startReadingApp);
+    });
+
+    getElement('pending-logout-btn').addEventListener('click', () => signOut(auth));
 
     onAuthStateChanged(auth, async user => {
         libraryPromises.clear();
@@ -143,19 +178,7 @@ export function initializeNovelAuth({ startReadingApp }) {
             return;
         }
 
-        setLoginError();
-        try {
-            const response = await callScript('session');
-            if (!response.user.name || !response.user.grade) {
-                showProfileForm(response.user);
-                return;
-            }
-            revealApp(response.user, startReadingApp);
-        } catch (error) {
-            console.error('접근 권한 확인 오류:', error);
-            setLoginError(error.message || '접근 권한을 확인하지 못했습니다.');
-            await signOut(auth);
-        }
+        await handleAuthenticatedUser(user, startReadingApp);
     });
 }
 

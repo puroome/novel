@@ -1,11 +1,9 @@
 import { isWordFile } from './content-parser.js';
 import { initializeNovelAuth } from './auth.js';
-// 퀴즈 마크다운(.md) 파일들이 들어 있는 폴더 이름입니다.
-const QUIZ_DIR = 'quizzes';
 
 // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
 // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-22-x';
+const APP_VERSION = '2026-08-22-z';
 
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;
@@ -163,6 +161,7 @@ function startWords() { return openLibrary('word'); }
 async function openLibrary(mode) {
     const buttons = [document.getElementById('start-btn'), document.getElementById('word-btn')];
     const statusText = document.getElementById('start-status');
+    const loadNote = document.getElementById('start-load-note');
 
     buttons.forEach(btn => {
         btn.disabled = true;
@@ -170,16 +169,14 @@ async function openLibrary(mode) {
     });
     statusText.classList.remove('text-red-600');
     statusText.classList.add('text-gray-500');
-    statusText.innerText = mode === 'quiz' ? '퀴즈를 불러오는 중입니다...' : '단어장을 불러오는 중입니다...';
+    statusText.innerText = mode === 'quiz' ? '퀴즈를 불러오는 중입니다...' : '어휘를 불러오는 중입니다...';
+    loadNote.classList.remove('hidden');
 
     try {
         // 버튼을 누를 때마다 목록을 새로 읽어, 방금 추가한 파일도 즉시 반영합니다.
         prefetchLibrary(mode);
         const library = await libraryLoadPromise;
         applyLibrary(library);
-
-        // 파일을 옮기는 도중에 읽었다면 다음에 누를 때 폴더를 새로 읽게 합니다.
-        if (!library.complete) libraryLoadPromise = null;
 
         if (mode === 'quiz') {
             if (allChapters.length === 0) {
@@ -193,7 +190,7 @@ async function openLibrary(mode) {
                 const wordFiles = library.fileNames.filter(isWordFile);
                 throw new Error(wordFiles.length > 0
                     ? `단어장 파일(${wordFiles.join(', ')})의 양식을 확인해 주세요. '## 📖 Chapter ...' 아래에 '* **[V1]**' 항목이 있어야 합니다.`
-                    : `이름에 'word'가 들어간 마크다운 파일을 '${QUIZ_DIR}' 폴더에 넣어 주세요. (지금 읽은 파일: ${library.fileNames.join(', ') || '없음'})`);
+                    : `Google Drive의 Novel MD Library 폴더에 이름에 'word'가 들어간 Markdown 파일을 넣어 주세요.`);
             }
             statusText.innerText = '';
             renderWordChapterList();
@@ -209,6 +206,7 @@ async function openLibrary(mode) {
         statusText.innerText = describeLoadError(error, mode);
 
     } finally {
+        loadNote.classList.add('hidden');
         buttons.forEach(btn => {
             btn.disabled = false;
             btn.classList.remove('opacity-60', 'cursor-not-allowed');
