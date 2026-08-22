@@ -72,22 +72,10 @@ function revealApp(user, startReadingApp) {
 async function loadSecureLibrary(kind) {
     const normalizedKind = kind === 'word' ? 'word' : 'quiz';
     if (!libraryPromises.has(normalizedKind)) {
-        const cacheKey = `novel-library-v1-${auth.currentUser?.uid || 'unknown'}-${normalizedKind}`;
-        let cachedLibrary = null;
-        try {
-            const cachedFiles = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
-            if (Array.isArray(cachedFiles)) cachedLibrary = buildLibraryFromFiles(cachedFiles, 'Google Drive (이 탭의 캐시)');
-        } catch {
-            sessionStorage.removeItem(cacheKey);
-        }
-
-        const promise = cachedLibrary
-            ? Promise.resolve(cachedLibrary)
-            : callScript('library', { kind: normalizedKind })
-                .then(data => {
-                    try { sessionStorage.setItem(cacheKey, JSON.stringify(data.files)); } catch (_) {}
-                    return buildLibraryFromFiles(data.files, 'Google Drive');
-                });
+        // 현재 열린 페이지 안에서는 재사용하지만, 새로고침하면 Drive에서 최신 파일을
+        // 다시 받습니다. 자료를 추가한 뒤 즉시 반영할 수 있도록 영구 저장소는 쓰지 않습니다.
+        const promise = callScript('library', { kind: normalizedKind })
+            .then(data => buildLibraryFromFiles(data.files, 'Google Drive'));
 
         libraryPromises.set(normalizedKind, promise.catch(error => {
             libraryPromises.delete(normalizedKind);
@@ -111,6 +99,15 @@ export function initializeNovelAuth({ startReadingApp }) {
             setLoginError('Google 로그인에 실패했습니다. 팝업 차단 여부를 확인해 주세요.');
         } finally {
             setLoginBusy(false);
+        }
+    });
+
+    getElement('logout-btn').addEventListener('click', async () => {
+        try {
+            await signOut(auth);
+        } catch (error) {
+            console.error('로그아웃 오류:', error);
+            setLoginError('로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.');
         }
     });
 

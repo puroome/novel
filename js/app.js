@@ -5,7 +5,7 @@ const QUIZ_DIR = 'quizzes';
 
 // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
 // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-22-v';
+const APP_VERSION = '2026-08-22-x';
 
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;
@@ -122,7 +122,7 @@ async function restoreHistoryScreen(state) {
         const lastQuestionIndex = allChapters[currentChapterIndex].questions.length - 1;
         currentQuestionIndex = Math.min(Math.max(state.questionIndex || 0, 0), lastQuestionIndex);
         score = Number.isInteger(state.score) ? state.score : 0;
-        document.getElementById('current-chapter-title').innerText = allChapters[currentChapterIndex].title;
+        document.getElementById('current-chapter-title').innerText = formatChapterListLabel(allChapters[currentChapterIndex].title, currentChapterIndex);
         showScreen('quiz-screen', { historyMode: 'none' });
         loadQuestion({ syncHistory: false });
         return;
@@ -335,7 +335,7 @@ function startWordChapter(index, { historyMode = 'push', animate = true } = {}) 
     const chapter = allWordChapters[index];
     const wordCount = chapter.items.filter(item => item.type === 'word').length;
 
-    document.getElementById('word-chapter-title').innerText = chapter.title;
+    document.getElementById('word-chapter-title').innerText = formatChapterListLabel(chapter.title, index);
     document.getElementById('word-count-text').innerText = `${wordCount} 단어`;
 
     const listContainer = document.getElementById('word-list');
@@ -437,7 +437,7 @@ function startChapter(index, { historyMode = 'push' } = {}) {
     currentQuestionIndex = 0;
     score = 0;
 
-    document.getElementById('current-chapter-title').innerText = allChapters[currentChapterIndex].title;
+    document.getElementById('current-chapter-title').innerText = formatChapterListLabel(allChapters[currentChapterIndex].title, currentChapterIndex);
     showScreen('quiz-screen', { historyMode });
     loadQuestion();
 }
@@ -568,7 +568,12 @@ function continueToNextChapter() {
 
 // --- 시작 화면을 보여 주는 동안 퀴즈/단어장 파일을 미리 받아 둡니다 ---
 export function startReadingApp({ loadLibrary }) {
-    if (appStarted) return;
+    if (appStarted) {
+        closeContinueModal();
+        document.getElementById('start-status').innerText = '';
+        showScreen('start-screen', { historyMode: 'replace' });
+        return;
+    }
     appStarted = true;
     loadAuthorizedLibrary = loadLibrary;
     window.history.replaceState(createHistoryState('start-screen'), '', window.location.href);
