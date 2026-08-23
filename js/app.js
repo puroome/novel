@@ -1,4 +1,3 @@
-import { isWordFile } from './content-parser.js';
 import { initializeNovelAuth } from './auth.js';
 import {
     describeChapter,
@@ -9,7 +8,7 @@ import {
 
 // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
 // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-22-ai';
+const APP_VERSION = '2026-08-23-firebase-content-fix1';
 
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;
@@ -35,7 +34,7 @@ let currentQuestionIndex = 0;
 let score = 0;
 let allWordChapters = [];       // 단어장(Word) 챕터
 let currentWordChapterIndex = 0;
-let libraryLoadPromise = null;  // 퀴즈/단어장 파일을 미리 받아 두는 작업
+let libraryLoadPromise = null;  // 퀴즈/단어장 데이터를 미리 받아 두는 작업
 let libraryLoadMode = null;
 let loadAuthorizedLibrary = null;
 let appStarted = false;
@@ -144,7 +143,7 @@ async function restoreHistoryScreen(state) {
     showScreen('start-screen', { historyMode: 'none' });
 }
 
-// 시작 화면이 떠 있는 동안 미리 파일을 받아 둡니다.
+// 시작 화면이 떠 있는 동안 Firebase 버전을 미리 확인합니다.
 // 그래서 'Quiz'나 'Word'를 누르면 대개 기다림 없이 바로 넘어갑니다.
 function prefetchLibrary(mode) {
     if (!loadAuthorizedLibrary) {
@@ -179,24 +178,21 @@ async function openLibrary(mode) {
     loadNote.classList.remove('hidden');
 
     try {
-        // 버튼을 누를 때마다 목록을 새로 읽어, 방금 추가한 파일도 즉시 반영합니다.
+        // 버튼을 누를 때마다 버전을 확인해 방금 동기화한 자료도 즉시 반영합니다.
         prefetchLibrary(mode);
         const library = await libraryLoadPromise;
         applyLibrary(library);
 
         if (mode === 'quiz') {
             if (allChapters.length === 0) {
-                throw new Error('마크다운 파일의 양식을 확인해 주세요.');
+                throw new Error('Firebase에 동기화된 퀴즈 자료가 없습니다.');
             }
             statusText.innerText = '';
             renderChapterList();
             showScreen('chapter-screen');
         } else {
             if (allWordChapters.length === 0) {
-                const wordFiles = library.fileNames.filter(isWordFile);
-                throw new Error(wordFiles.length > 0
-                    ? `단어장 파일(${wordFiles.join(', ')})의 양식을 확인해 주세요. '## 📖 Chapter ...' 아래에 '* **[V1]**' 항목이 있어야 합니다.`
-                    : `Google Drive의 Novel MD Library 폴더에 이름에 'word'가 들어간 Markdown 파일을 넣어 주세요.`);
+                throw new Error('Firebase에 동기화된 어휘·배경지식 자료가 없습니다.');
             }
             statusText.innerText = '';
             renderWordChapterList();
@@ -281,6 +277,16 @@ function renderExplanation(text) {
     return html;
 }
 
+function renderQuestionExplanation(question) {
+    if (!question?.evidence) return renderExplanation(question?.explanation || '해설이 제공되지 않았습니다.');
+
+    const evidence = `<span class="block my-3 px-4 py-3 rounded-lg bg-white border border-gray-300 border-l-4 border-l-blue-400 text-gray-600 font-normal leading-relaxed">${escapeHtml(question.evidence)}</span>`;
+    const explanation = question.explanation
+        ? `<span class="block">${escapeHtml(question.explanation)}</span>`
+        : '';
+    return evidence + explanation;
+}
+
 // 단어장 표시용 마크업은 HTML을 이스케이프한 뒤 허용한 표시만 적용합니다.
 function renderMarkedText(text) {
     const cleaned = String(text).replace(/\[\/?\s*SENTENCE\s*\]/gi, '').trim();
@@ -288,6 +294,18 @@ function renderMarkedText(text) {
     return segments.map((chunk, index) => {
         if (index % 2 === 1) {
             return `<span class="font-bold text-red-600">${escapeHtml(chunk.trim())}</span>`;
+        }
+        return chunk ? escapeHtml(chunk) : '';
+    }).join('');
+}
+
+// 시트의 sentence 열은 강조할 어휘를 [ ]로 한 번 감쌉니다.
+function renderWordSentence(text) {
+    const sentence = String(text).trim();
+    const segments = sentence.split(/\[([^\]]+)\]/g);
+    return segments.map((chunk, index) => {
+        if (index % 2 === 1) {
+            return `<span class="font-bold text-red-600">${escapeHtml(chunk)}</span>`;
         }
         return chunk ? escapeHtml(chunk) : '';
     }).join('');
@@ -308,23 +326,26 @@ function renderWordChapterList() {
     });
 }
 
-// 파생어·연어는 해설과 눈에 띄게 구분되도록 알약 모양 칩으로 보여 줍니다.
-// (무엇인지 이름표를 달지 않고 색으로만 구분합니다: 파생어=빨강 계열, 연어=남색 계열)
-function renderEntryRow(entries, kind) {
+// 파생어는 기존처럼 타원형 칩으로 보여 줍니다.
+function renderDerivativeRow(entries) {
     if (!entries || entries.length === 0) return '';
 
-    const style = kind === 'derivative'
-        ? { box: 'bg-red-50 border-red-100', term: 'text-red-700', gloss: 'text-red-400' }
-        : { box: 'bg-slate-50 border-slate-200', term: 'text-slate-700', gloss: 'text-slate-400' };
-
     const chips = entries.map(entry => `
-        <span class="inline-flex items-baseline gap-1.5 rounded-full border ${style.box} px-3 py-1 text-sm">
-            <span class="font-semibold ${style.term}">${escapeHtml(entry.term)}</span>
-            ${entry.gloss ? `<span class="${style.gloss}">${escapeHtml(entry.gloss)}</span>` : ''}
+        <span class="inline-flex items-baseline gap-1.5 rounded-full border bg-red-50 border-red-100 px-3 py-1 text-sm">
+            <span class="font-semibold text-red-700">${escapeHtml(entry.term)}</span>
+            ${entry.gloss ? `<span class="text-red-400">${escapeHtml(entry.gloss)}</span>` : ''}
         </span>
     `).join('');
 
     return `<div class="flex flex-wrap gap-2">${chips}</div>`;
+}
+
+// 연어는 칩을 사용하지 않고, 시트의 세미콜론 단위 값을 한 줄씩 그대로 표시합니다.
+function renderCollocationText(entries) {
+    if (!entries || entries.length === 0) return '';
+    return `<div class="text-sm text-slate-700 leading-relaxed">${entries
+        .map(entry => escapeHtml(entry))
+        .join('<br>')}</div>`;
 }
 
 // --- [6-2단계] 단어 학습장 그리기 ---
@@ -352,15 +373,14 @@ function startWordChapter(index, { historyMode = 'push', animate = true } = {}) 
                 <div class="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-3">
                     <span class="shrink-0 text-xs font-bold text-white bg-red-500 rounded-full px-2 py-0.5">${wordNumber}</span>
                     <span class="text-xl font-bold text-red-700">${escapeHtml(item.word)}</span>
-                    ${item.pos ? `<span class="shrink-0 text-xs font-bold text-gray-500 bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5">${escapeHtml(item.pos)}</span>` : ''}
                     <span class="text-gray-600 font-medium">${escapeHtml(item.meaning)}</span>
                 </div>
-                ${item.sentence ? `<p class="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 border-l-4 border-l-red-400 text-gray-700 leading-relaxed">${renderMarkedText(item.sentence)}</p>` : ''}
+                ${item.sentence ? `<p class="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 border-l-4 border-l-red-400 text-gray-700 leading-relaxed">${renderWordSentence(item.sentence)}</p>` : ''}
                 ${item.note ? `<p class="mt-3 text-sm text-gray-600 leading-relaxed">${renderMarkedText(item.note)}</p>` : ''}
                 ${(item.derivatives.length + item.collocations.length) > 0 ? `
                 <div class="mt-3 pt-3 border-t border-gray-100 space-y-2">
-                    ${renderEntryRow(item.derivatives, 'derivative')}
-                    ${renderEntryRow(item.collocations, 'collocation')}
+                    ${renderDerivativeRow(item.derivatives)}
+                    ${renderCollocationText(item.collocations)}
                 </div>` : ''}
             `;
         } else {
@@ -567,12 +587,12 @@ function selectOption(selectedIndex, buttonElement) {
         buttonElement.classList.add('border-amber-500', 'bg-amber-50', 'text-amber-800');
         expBox.classList.add('bg-amber-50', 'border', 'border-amber-200');
         expText.innerHTML = '<span class="block font-bold text-amber-700 mb-2">⚠️ 정답 정보 오류</span>'
-            + renderExplanation(qData.explanation);
+            + renderQuestionExplanation(qData);
     } else if (selectedIndex === qData.answerIndex) {
         buttonElement.classList.remove('border-gray-200', 'bg-gray-50', 'opacity-50');
         buttonElement.classList.add('border-green-500', 'bg-green-50', 'text-green-800');
         expBox.classList.add('bg-green-50', 'border', 'border-green-200');
-        expText.innerHTML = `<span class="block font-bold text-green-700 mb-2">✅ CORRECT</span>${renderExplanation(qData.explanation)}`;
+        expText.innerHTML = `<span class="block font-bold text-green-700 mb-2">✅ CORRECT</span>${renderQuestionExplanation(qData)}`;
         score++;
     } else {
         buttonElement.classList.remove('border-gray-200', 'bg-gray-50', 'opacity-50');
@@ -582,7 +602,7 @@ function selectOption(selectedIndex, buttonElement) {
         buttons[qData.answerIndex].classList.add('border-green-500', 'bg-green-50');
 
         expBox.classList.add('bg-red-50', 'border', 'border-red-200');
-        expText.innerHTML = `<span class="block font-bold text-red-700 mb-2">❌ WRONG</span>${renderExplanation(qData.explanation)}`;
+        expText.innerHTML = `<span class="block font-bold text-red-700 mb-2">❌ WRONG</span>${renderQuestionExplanation(qData)}`;
     }
 
     expBox.classList.remove('hidden');
@@ -673,8 +693,8 @@ export function startReadingApp({ loadLibrary, prepareLibraryCache }) {
     document.addEventListener('contextmenu', event => event.preventDefault());
     document.addEventListener('keydown', handleWordChapterArrowKeys);
     ensureLatestApp();
-    // 로그인 직후에는 가벼운 파일 목록만 확인합니다. 변함이 없다면 버튼을 눌렀을 때
-    // Drive 원문 대신 이 기기에 보관한 MD 파일을 즉시 사용합니다.
+    // 로그인 직후에는 가벼운 Firebase 버전만 확인합니다. 변함이 없다면 버튼을 눌렀을 때
+    // 이 기기에 보관한 구조화 데이터를 즉시 사용합니다.
     prepareLibraryCache?.().catch(error => console.warn('기기 캐시 확인 오류:', error));
 }
 

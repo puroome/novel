@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'wonder-reading-shell-v2';
+const CACHE_VERSION = 'wonder-reading-shell-v4';
 const APP_SHELL = [
     './',
     './index.html',
@@ -9,8 +9,7 @@ const APP_SHELL = [
     './js/app.js',
     './js/auth.js',
     './js/config.js',
-    './js/content-parser.js',
-    './js/library-loader.js',
+    './js/firebase-content.js',
     './js/library-cache.js',
     './js/chapter-organization.js'
 ];
@@ -42,7 +41,7 @@ self.addEventListener('fetch', event => {
         url.hostname === 'cdn.tailwindcss.com' ||
         (url.hostname === 'www.gstatic.com' && url.pathname.includes('/firebasejs/'));
 
-    // 승인 확인과 Drive 자료는 항상 네트워크에서 최신 상태로 요청합니다.
+    // 승인 확인과 Firebase 데이터는 항상 네트워크 또는 Firebase SDK에서 처리합니다.
     if (!isAppAsset && !isRuntimeAsset) return;
 
     event.respondWith(

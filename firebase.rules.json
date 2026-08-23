@@ -1,0 +1,11 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "novel": {
+      "content": {
+        ".read": "auth != null && root.child('novel').child('accessByUid').child(auth.uid).child('permission').val() === true"
+      }
+    }
+  }
+}

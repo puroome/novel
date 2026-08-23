@@ -25,6 +25,8 @@ test('대분류는 정상화된 챕터 번호의 경계를 따른다', () => {
     assert.equal(describeChapter('Chapter 81: The Universe').category, 'Part Five: Justin');
     assert.equal(describeChapter('Chapter 82: North Pole').category, 'Part Six: August');
     assert.equal(describeChapter('Chapter 93: Camp Lies').category, 'Part Seven: Miranda');
+    assert.equal(describeChapter('Chapter 98: The Bus Stop').category, 'Part Seven: Miranda');
+    assert.equal(describeChapter('Chapter 99: The Fifth-Grade Nature Retreat').category, 'Part Eight: August');
     assert.equal(describeChapter('Chapter 100: Known For').category, 'Part Eight: August');
 });
 

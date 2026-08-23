@@ -1,6 +1,6 @@
 // Firebase의 웹 설정값은 비밀키가 아닙니다. Database Secret은 절대 여기에 넣지 않습니다.
 export const config = {
-    SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxWpbbnw2BibJZ-NLC2QpyUv3wqJP6ljy1jbNdw0btpTOwj-TDU9HsO7-SKAsA3G7Lz/exec',
+    SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyl0tQdNI3d93EOryiVmwc0KOGH4Nl0a8Helxmiqof3iEysDevXvgnWLJ4CRh_m9fSU/exec',
     FIREBASE_CONFIG: {
         apiKey: 'AIzaSyCafyN3HAOqJSt41ZgZj8AF5GvkMW6z-ZE',
         authDomain: 'novel-91d5f.firebaseapp.com',

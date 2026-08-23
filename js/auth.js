@@ -6,8 +6,13 @@ import {
     signInWithPopup,
     signOut
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+import {
+    get,
+    getDatabase,
+    ref
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js';
 import { config } from './config.js';
-import { buildLibraryFromFiles } from './library-loader.js';
+import { normalizeFirebaseChapters } from './firebase-content.js';
 import {
     clearLibraryCache,
     readLibraryCache,
@@ -15,9 +20,9 @@ import {
 } from './library-cache.js';
 
 let auth = null;
+let database = null;
 let approvedUser = null;
-const libraryPromises = new Map();
-const libraryManifestPromises = new Map();
+const FIREBASE_CONTENT_PATH = 'novel/content';
 
 function getElement(id) {
     return document.getElementById(id);
@@ -86,52 +91,51 @@ function revealApp(user, startReadingApp) {
 
 async function loadSecureLibrary(kind) {
     const normalizedKind = kind === 'word' ? 'word' : 'quiz';
-    if (!libraryPromises.has(normalizedKind)) {
-        const promise = getLibraryManifest(normalizedKind).then(manifest => {
-            const cached = readLibraryCache(normalizedKind);
-            if (cached?.signature === manifest.signature) {
-                return buildLibraryFromFiles(cached.files, '이 기기의 캐시');
-            }
-
-            // 파일을 추가·삭제·수정하면 서명값이 달라집니다. 이때만 원문을 다시 받습니다.
-            return callScript('library', { kind: normalizedKind }).then(data => {
-                saveLibraryCache(normalizedKind, { signature: manifest.signature, files: data.files });
-                return buildLibraryFromFiles(data.files, 'Google Drive');
-            });
-        });
-
-        libraryPromises.set(normalizedKind, promise.catch(error => {
-            libraryPromises.delete(normalizedKind);
-            throw error;
-        }));
+    const manifest = await getLibraryManifest(normalizedKind);
+    const cached = readLibraryCache(normalizedKind);
+    if (cached?.version === manifest.version) {
+        return createLibrary(normalizedKind, cached.chapters, '이 기기의 캐시');
     }
-    return libraryPromises.get(normalizedKind);
+
+    const snapshot = await get(ref(database, `${FIREBASE_CONTENT_PATH}/${normalizedKind}/chapters`));
+    if (!snapshot.exists()) {
+        throw new Error(`Firebase에 ${normalizedKind === 'word' ? '어휘' : '퀴즈'} 자료가 없습니다.`);
+    }
+    const chapters = normalizeFirebaseChapters(normalizedKind, snapshot.val());
+    if (chapters.length === 0) {
+        throw new Error('Firebase 학습 자료 구조가 올바르지 않습니다. 다시 동기화해 주세요.');
+    }
+    saveLibraryCache(normalizedKind, { version: manifest.version, chapters });
+    return createLibrary(normalizedKind, chapters, 'Firebase');
 }
 
-function getLibraryManifest(kind) {
+async function getLibraryManifest(kind) {
     const normalizedKind = kind === 'word' ? 'word' : 'quiz';
-    if (!libraryManifestPromises.has(normalizedKind)) {
-        const promise = callScript('library_manifest', { kind: normalizedKind })
-            .then(data => {
-                if (typeof data.signature !== 'string' || !data.signature) {
-                    throw new Error('자료 목록의 변경 정보를 확인하지 못했습니다.');
-                }
-                return data;
-            });
-        libraryManifestPromises.set(normalizedKind, promise.catch(error => {
-            libraryManifestPromises.delete(normalizedKind);
-            throw error;
-        }));
+    const snapshot = await get(ref(database, `${FIREBASE_CONTENT_PATH}/manifest/${normalizedKind}`));
+    const manifest = snapshot.val();
+    if (!snapshot.exists() || typeof manifest?.version !== 'string' || !manifest.version) {
+        throw new Error('Firebase 학습 자료 버전을 확인하지 못했습니다. 시트 동기화를 실행해 주세요.');
     }
-    return libraryManifestPromises.get(normalizedKind);
+    return manifest;
 }
 
 async function prepareLibraryCache() {
     await Promise.all(['quiz', 'word'].map(async kind => {
         const manifest = await getLibraryManifest(kind);
         const cached = readLibraryCache(kind);
-        if (cached && cached.signature !== manifest.signature) clearLibraryCache(kind);
+        if (cached && cached.version !== manifest.version) clearLibraryCache(kind);
     }));
+}
+
+function createLibrary(kind, chapters, source) {
+    const normalizedChapters = normalizeFirebaseChapters(kind, chapters);
+    return {
+        source,
+        fileNames: [],
+        parsingWarnings: [],
+        quizChapters: kind === 'quiz' ? normalizedChapters : [],
+        wordChapters: kind === 'word' ? normalizedChapters : []
+    };
 }
 
 async function handleAuthenticatedUser(user, startReadingApp) {
@@ -157,6 +161,7 @@ async function handleAuthenticatedUser(user, startReadingApp) {
 export function initializeNovelAuth({ startReadingApp }) {
     const firebaseApp = initializeApp(config.FIREBASE_CONFIG);
     auth = getAuth(firebaseApp);
+    database = getDatabase(firebaseApp);
 
     getElement('google-login-btn').addEventListener('click', async () => {
         setLoginError();
@@ -209,8 +214,6 @@ export function initializeNovelAuth({ startReadingApp }) {
     getElement('pending-logout-btn').addEventListener('click', () => signOut(auth));
 
     onAuthStateChanged(auth, async user => {
-        libraryPromises.clear();
-        libraryManifestPromises.clear();
         if (!user) {
             approvedUser = null;
             getElement('app-container').classList.add('hidden');

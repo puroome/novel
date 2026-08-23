@@ -15,11 +15,11 @@ function createStorage() {
     };
 }
 
-test('기기 캐시는 Drive 목록 서명과 MD 원문을 함께 보관한다', () => {
+test('기기 캐시는 Firebase 버전과 구조화된 챕터를 함께 보관한다', () => {
     const storage = createStorage();
     const entry = {
-        signature: '[{"name":"wonder-quiz-v22.md"}]',
-        files: [{ name: 'wonder-quiz-v22.md', text: '## 📖 Chapter 1: One' }]
+        version: 'content-sha256-v1',
+        chapters: [{ title: 'Chapter 1: One', questions: [] }]
     };
 
     assert.equal(saveLibraryCache('quiz', entry, storage), true);

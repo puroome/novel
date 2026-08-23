@@ -65,7 +65,7 @@ function categoryForChapterNumber(chapterNumber) {
     if (chapterNumber <= 73) return 'Part Four: Jack';
     if (chapterNumber <= 81) return 'Part Five: Justin';
     if (chapterNumber <= 92) return 'Part Six: August';
-    if (chapterNumber <= 99) return 'Part Seven: Miranda';
+    if (chapterNumber <= 98) return 'Part Seven: Miranda';
     return 'Part Eight: August';
 }
 

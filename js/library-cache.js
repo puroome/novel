@@ -1,4 +1,4 @@
-const CACHE_PREFIX = 'novel-md-library-cache-v1';
+const CACHE_PREFIX = 'novel-firebase-library-cache-v2';
 
 function normalizeKind(kind) {
     return kind === 'word' ? 'word' : 'quiz';
@@ -8,15 +8,14 @@ export function libraryCacheKey(kind) {
     return `${CACHE_PREFIX}:${normalizeKind(kind)}`;
 }
 
-// 파싱 결과 대신 MD 원문을 저장하므로, 화면/파서 코드가 바뀌어도 새 코드로 다시 읽습니다.
+// Firebase 콘텐츠 버전과 구조화된 챕터를 함께 저장합니다.
 export function readLibraryCache(kind, storage = globalThis.localStorage) {
     try {
         const raw = storage?.getItem(libraryCacheKey(kind));
         if (!raw) return null;
 
         const cached = JSON.parse(raw);
-        if (typeof cached?.signature !== 'string' || !Array.isArray(cached.files)) return null;
-        if (!cached.files.every(file => typeof file?.name === 'string' && typeof file?.text === 'string')) return null;
+        if (typeof cached?.version !== 'string' || !Array.isArray(cached.chapters)) return null;
         return cached;
     } catch (error) {
         console.warn('기기에 저장한 라이브러리를 읽지 못했습니다.', error);
@@ -24,13 +23,13 @@ export function readLibraryCache(kind, storage = globalThis.localStorage) {
     }
 }
 
-export function saveLibraryCache(kind, { signature, files }, storage = globalThis.localStorage) {
-    if (typeof signature !== 'string' || !Array.isArray(files)) return false;
+export function saveLibraryCache(kind, { version, chapters }, storage = globalThis.localStorage) {
+    if (typeof version !== 'string' || !Array.isArray(chapters)) return false;
     try {
-        storage?.setItem(libraryCacheKey(kind), JSON.stringify({ signature, files }));
+        storage?.setItem(libraryCacheKey(kind), JSON.stringify({ version, chapters }));
         return true;
     } catch (error) {
-        // 저장 공간이 부족하거나 브라우저가 저장소를 막아도 Drive 이용은 계속합니다.
+        // 저장 공간이 부족하거나 브라우저가 저장소를 막아도 Firebase 이용은 계속합니다.
         console.warn('라이브러리를 기기에 저장하지 못했습니다.', error);
         return false;
     }

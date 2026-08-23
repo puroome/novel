@@ -1,211 +1,96 @@
-# 📖 Wonder 독서 퀴즈
+# Wonder Reading Quiz
 
-소설 《Wonder》(원더) 읽기 활동을 위한 웹 기반 객관식 퀴즈 앱입니다.
-`quizzes/` 폴더에 넣어 둔 마크다운(`.md`) 문제 파일을 **앱을 열면 자동으로 읽어 들여** 챕터별 퀴즈로 바꿔 줍니다.
+《Wonder》의 챕터별 퀴즈, 어휘, 배경지식을 제공하는 Firebase 기반 웹 앱입니다.
 
-배포된 앱은 별도 빌드 없이 정적 파일만으로 동작합니다. 로컬 테스트용 서버도 함께 제공하며,
-이 서버는 `quizzes/` 폴더가 바뀔 때마다 파일 목록을 자동으로 갱신합니다.
+## 데이터 흐름
 
-## 사용 방법
+```text
+Google Sheets (word / bg / quiz)
+    → Apps Script의 수동 동기화
+    → Firebase Realtime Database
+    → 승인된 앱 사용자
+```
 
-### localhost에서 실행
+앱은 Google Drive의 Markdown 파일을 읽지 않습니다. Google Sheets는 관리 원본이고,
+사용자 앱은 Firebase에 마지막으로 동기화된 자료를 직접 읽습니다.
 
-프로젝트 폴더에서 다음 명령을 실행한 뒤 `http://127.0.0.1:4173`으로 접속합니다.
+## Google Sheets 구조
+
+스프레드시트 ID는 `Code.gs`의 `NOVEL_SHEET_ID`에 설정합니다.
+
+### `AllowedUsers`
+
+| Email | Name | Grade | Permission | Edit |
+|---|---|---|---|---|
+
+- `Permission`, `Edit`: `yes` 또는 `no`
+- `Edit=yes`이면 `Permission=yes`여야 합니다.
+
+### `word`
+
+| part_title | chapter_no | chapter_title | word | meaning | relative | collocation | sentence | page |
+|---|---|---|---|---|---|---|---|---|
+
+- `relative`: 항목을 `;`로 구분합니다. 앱에서는 타원형 칩으로 표시됩니다.
+- `collocation`: 항목을 `;`로 구분합니다. 앱에서는 칩 없이 한 줄에 하나씩 표시됩니다.
+- `sentence`: 강조할 어휘를 `[ ]`로 정확히 한 번 감쌉니다.
+- 품사 열과 품사 표시는 사용하지 않습니다.
+
+### `bg`
+
+| part_title | chapter_no | chapter_title | eng | kor | remark |
+|---|---|---|---|---|---|
+
+### `quiz`
+
+| chapter_no | chapter_title | question_no | question | choice_1 | choice_2 | choice_3 | choice_4 | answer | evidence | explanation |
+|---|---|---|---|---|---|---|---|---|---|---|
+
+- `answer`: `1`, `2`, `3`, `4` 중 하나입니다.
+- `evidence`: 정답 확인 뒤 기존 원문 근거 박스에 표시됩니다.
+
+## Apps Script 설정
+
+새 스프레드시트에서 **확장 프로그램 → Apps Script**를 열고 `Code.gs` 내용을 붙여 넣습니다.
+
+프로젝트 설정의 스크립트 속성에 다음 두 값을 설정합니다.
+
+| 속성 | 값 |
+|---|---|
+| `FIREBASE_URL` | `https://novel-91d5f-default-rtdb.asia-southeast1.firebasedatabase.app` |
+| `FIREBASE_SECRET` | Firebase 프로젝트의 Database Secret |
+
+웹 앱 배포 설정:
+
+- 실행 사용자: 배포한 사용자
+- 액세스 권한: 모든 사용자
+
+코드를 변경한 뒤에는 기존 배포를 새 버전으로 업데이트합니다.
+
+## Firebase 보안 규칙
+
+Realtime Database의 **규칙** 화면에 `firebase.rules.json`의 내용을 적용합니다.
+
+콘텐츠는 Firebase Authentication에 로그인했고 `AllowedUsers`에서 승인된 UID만 읽을 수
+있습니다. 사용자 명단, 이메일-UID 인덱스, 권한 인덱스는 클라이언트에서 읽을 수 없습니다.
+
+## 동기화 순서
+
+시트를 새로고침하면 **📚 Novel Firebase** 메뉴가 나타납니다.
+
+1. `허용 명단 동기화`
+2. `학습 자료 동기화`
+
+학습 자료 동기화는 세 시트 전체를 검증한 뒤 한 번에 교체합니다. 누락된 필수값,
+중복된 챕터별 키, 일치하지 않는 챕터 제목, 잘못된 정답이 있으면 Firebase를 변경하지
+않고 해당 시트와 행 번호를 알려 줍니다.
+
+## 로컬 실행과 테스트
 
 ```bash
 npm start
+npm test
 ```
 
-이 방법을 권장합니다. 서버가 실행되는 동안 `quizzes/`에 Markdown 파일을 추가·삭제·이름 변경하면
-`manifest.json`이 자동으로 갱신됩니다. `Quiz` 또는 `Word` 버튼을 누를 때 실제 폴더 목록을 다시 확인합니다.
-
-Live Server 같은 일반 정적 서버를 사용해도 되지만, 이런 서버는 대개 브라우저에 폴더 목록을 제공하지 않습니다.
-그 경우 새 파일을 추가한 뒤 아래 명령으로 목록을 먼저 갱신해야 합니다.
-
-```bash
-npm run manifest
-```
-
-`index.html`을 직접 더블클릭해 여는 방식(`file://`)은 브라우저 보안 정책 때문에 지원하지 않습니다.
-
-### 앱 사용
-
-아래 주소로 접속하면 두 가지 버튼이 나옵니다.
-
-* **`Quiz`** (파란색) – 객관식 퀴즈를 풉니다.
-* **`Word`** (빨간색) – 챕터별 어휘·배경지식 학습장을 봅니다.
-
-수업 자료가 실수로 복사되거나 브라우저 메뉴가 열리지 않도록 앱 화면의 텍스트 선택과 우클릭은 막혀 있습니다.
-단어 학습 화면에서는 하단의 `←`·`→` 버튼이나 키보드 좌우 화살표로 이전·다음 챕터를 바로 볼 수 있습니다.
-퀴즈 한 챕터를 마치면 간결한 앱 내 창에서 계속 풀지 묻습니다. `예`를 누르면 다음 챕터로, `아니오`를 누르면 첫 화면으로 이동합니다.
-브라우저의 뒤로가기·앞으로가기 버튼으로도 직전에 보던 앱 화면을 오갈 수 있습니다.
-
-둘 다 버튼을 누르면 먼저 챕터 목록이 나타납니다.
-챕터 목록에서 왼쪽 위의 🏠 아이콘을 누르면 **맨 첫 화면**(Quiz / Word)으로 돌아가고,
-퀴즈나 학습장을 보는 중에 누르면 **챕터 목록**으로 돌아갑니다.
-문제·단어장 파일은 시작 화면이 떠 있는 동안 미리 받아 두므로 대개 기다림 없이 바로 넘어갑니다.
-
-```
-https://<GitHub 사용자명>.github.io/wonder/
-```
-
-## 퀴즈 파일과 단어장 파일 구분
-
-같은 `quizzes/` 폴더에 두 종류의 파일을 함께 둡니다. **파일 이름으로 구분**합니다.
-
-| 파일 이름 | 쓰이는 곳 |
-| --- | --- |
-| 이름에 `word`가 들어감 (예: `wonder-word-chapters-1-5.md`) | `Word` 학습장 |
-| 그 밖의 파일 (예: `wonder-quiz-chapters-1-5.md`) | `Quiz` 퀴즈 |
-
-## 문제 추가하기
-
-1. 아래 [문제 파일 형식](#문제-파일-형식)에 맞춰 `.md` 파일을 만듭니다.
-2. GitHub 저장소의 **`quizzes/` 폴더에 그 파일을 올립니다.** (웹에서 `Add file → Upload files`로 올려도 됩니다.)
-3. localhost에서는 `npm start`가 목록을 자동 갱신합니다. 일반 정적 서버를 쓴다면 `npm run manifest`를 한 번 실행합니다.
-
-> 파일 이름 끝에 `-v7`처럼 버전 번호를 붙여도 됩니다.
-> 앱은 버전 번호를 뗀 앞부분(`wonder-quiz-chapters-1-5-v7.md` → `wonder-quiz-chapters-1-5`)으로 파일을 알아봅니다.
-> 같은 이름의 파일이 버전만 다르게 여러 개 있으면 **번호가 가장 큰 파일 하나만** 사용합니다.
-
-> GitHub Pages에서는 **GitHub 저장소의 실제 `quizzes/` 폴더 목록**을 가장 먼저 사용합니다.
-> 오래된 `manifest.json`과 합치지 않으므로 파일을 삭제하거나 이름을 바꿔도 예전 파일 때문에 로딩이 중단되지 않습니다.
-> `.github/workflows/sync-quiz-manifest.yml`이 Markdown 추가·삭제·이름 변경을 감지해 `manifest.json`도 자동 갱신합니다.
-> 따라서 GitHub에 Markdown 파일을 올릴 때 manifest를 직접 편집할 필요가 없습니다.
->
-> `manifest.json`은 GitHub API를 사용할 수 없거나 일반 정적 서버에서 실행할 때를 위한 예비 목록입니다.
-> 브라우저의 JavaScript만으로 서버 폴더를 직접 열람할 수는 없으므로 localhost에서는 반드시 `npm start`를 권장합니다.
-> 이 서버는 실제 폴더를 감시해 Quiz와 Word 파일을 똑같은 로직으로 자동 반영합니다.
-> 일반 localhost 서버가 폴더 목록을 20개 등으로 잘라 보내더라도 앱은 manifest와 안전하게 보완하고,
-> 실제로 열리는 최신 파일만 골라 사용합니다.
-
-## 시작 화면 이미지 바꾸기
-
-시작 화면의 그림은 `assets/wonder.webp` 파일입니다.
-다른 그림으로 바꾸려면 같은 이름으로 덮어쓰면 됩니다.
-
-`.png`나 `.jpg`처럼 확장자가 다른 파일을 쓰려면 `assets/` 폴더에 올린 뒤
-`index.html`의 아래 한 줄에서 파일 이름만 고쳐 주세요.
-
-```html
-<img src="assets/wonder.webp" alt="Wonder" ...>
-```
-
-세로로 긴 그림이든 가로로 긴 그림이든 높이에 맞춰 자동으로 조정됩니다.
-
-## 폴더 구조
-
-```
-wonder/
-├── index.html              # 화면 구조
-├── package.json            # localhost 실행·테스트 명령
-├── js/
-│   ├── content-parser.js   # Markdown 파서와 파일 버전 처리
-│   ├── library-loader.js   # manifest·폴더 목록·GitHub 파일 로더
-│   └── app.js              # 화면 상태와 사용자 상호작용
-├── scripts/
-│   ├── dev-server.mjs      # manifest 자동 갱신 localhost 서버
-│   └── generate-manifest.mjs
-├── tests/                  # 파서·파일 누락 회귀 테스트
-├── assets/
-│   └── wonder.webp         # 시작 화면 그림
-└── quizzes/
-    ├── manifest.json       # 모든 Markdown 파일의 목록
-    ├── wonder-quiz-chapters-1-5.md    # 퀴즈
-    ├── wonder-quiz-chapters-6-10.md
-    └── wonder-word-chapters-1-5.md    # 단어장(Learn Words)
-```
-
-## 문제 파일 형식
-
-한 파일 안에 여러 챕터를 담을 수 있습니다. 문제 영역과 해설 영역을 나누어 작성합니다.
-
-### 1) 문제 영역
-
-챕터는 `## 📖 Chapter ...` 로 시작하고, 문제는 `[Q번호]` 로 시작합니다.
-선택지는 반드시 `①②③④⑤` 기호로 시작해야 합니다.
-
-```markdown
-## 📖 Chapter 1: Ordinary (평범함)
-
-[Q1] 어거스트가 요술램프를 발견했을 때 빌고 싶다고 한 유일한 소원은?
-① 전 세계 사람들이 자신을 우러러보는 것
-② 아무도 알아차리지 못하는 평범한 얼굴을 갖는 것
-③ 누나인 비아보다 더 크고 힘이 세지는 것
-④ 자신을 놀린 사람들에게 복수하는 것
-```
-
-* 챕터 제목의 괄호 안 내용(한글 해석)은 화면에 표시할 때 자동으로 지워집니다.
-* 챕터는 제목 속 `Chapter 숫자`를 기준으로 자동 정렬되므로, 파일을 나눠 올려도 순서가 섞이지 않습니다.
-* 화면의 챕터 번호는 Markdown에 적힌 숫자를 그대로 사용하며 별도의 번호 보정을 하지 않습니다.
-
-### 2) 정답 및 해설 영역
-
-`## 🔑 정답 및 해설` 아래에 문제 번호별로 정답과 해설을 적습니다.
-
-```markdown
-## 🔑 정답 및 해설
-
-* **[Q1]** 정답: ②
-* *해설*: 어거스트는 평범한 얼굴을 갖고 싶다는 소원을 이야기합니다.
-```
-
-* `정답:` 뒤의 기호(`①`~`⑤`)가 정답 번호가 됩니다.
-* `* *해설*:` 뒤의 내용이 문제를 푼 뒤 표시됩니다.
-* 해설 안에 `[ENG: ...]` 를 쓰면 정답의 근거가 되는 원문으로 보고 **따로 박스에 담아** 보여 줍니다.
-  (`ENG:` 표시와 대괄호는 화면에 나오지 않고 원문만 보입니다.)
-
-```markdown
-* **[Q1]** 정답: ②
-* *해설*: [ENG: I would wish that I had a normal face that no one ever noticed at all.] 어거스트는 평범한 얼굴을 갖고 싶다는 소원을 이야기합니다.
-```
-
-## 단어장 파일 형식
-
-`Learn Words`에 쓰이는 파일입니다. 챕터 제목은 퀴즈와 똑같이 `## 📖 Chapter ...` 로 시작하고,
-그 아래에 어휘 항목 `* **[V번호]**` 와 배경지식 항목 `* **[BG번호]**` 를 씁니다.
-
-```markdown
-## 📖 Chapter 1: Ordinary (평범함)
-
-### 📚 Vocabulary & Expressions (어휘 및 표현)
-
-* **[V1]**
-  * *문장*: [SENTENCE] They see me as [RED: extraordinary]. [/SENTENCE]
-  * *어휘*: **extraordinary**
-  * *품사*: `a`
-  * *의미*: 비범한, 놀라운, 대단한
-  * *해설*: 접두사 extra-(~를 벗어난)와 ordinary(평범한)가 결합된 낱말입니다.
-  * *파생어*: extraordinariness (n. 비범함), extraordinarily (adv. 대단히)
-  * *연어*: extraordinary talent (비범한 재능), extraordinary circumstances (이례적인 상황)
-
-### 🌍 Background Knowledge (배경지식)
-
-* **[BG1] Star Wars as a Psychological Shield (정서적 방어막으로서의 스타워즈)**
-  * *설명*: 어거스트의 정체성과 내면적 보호막을 대변하는 대중문화 코드입니다.
-```
-
-배경지식 제목은 위처럼 `[BG번호]` 옆에 적어도 되고, 예전처럼 `* *제목*:` 줄로 적어도 됩니다.
-
-| 줄 | 화면에 나오는 모습 |
-| --- | --- |
-| `*문장*` | 예문 박스 (왼쪽에 빨간 세로줄) |
-| `*어휘*` | 카드 맨 위의 큰 빨간 글씨 |
-| `*품사*` | 단어 옆의 회색 작은 딱지 (`a`, `n`, `v`, `adv` …) |
-| `*의미*` | 단어 옆의 뜻 |
-| `*해설*` | 예문 아래 회색 설명글 |
-| `*파생어*` | 해설 아래 **연분홍 알약**들 |
-| `*연어*` | 해설 아래 **회청색 알약**들 |
-
-* `*파생어*`·`*연어*`는 쉼표로 여러 개를 이어 씁니다. `단어 (뜻)` 형태로 적으면 뜻이 흐린 색으로 붙습니다.
-  괄호 안의 쉼표(`n. 짜증, 골칫거리`)는 그대로 한 항목으로 둡니다.
-* 화면에는 '파생어', '연어' 같은 이름표를 적지 않고 **색으로만** 구분합니다.
-* `*품사*`·`*의미*`·`*파생어*`·`*연어*` 줄은 없어도 됩니다. 없으면 그 부분만 빠지고 나머지는 그대로 나옵니다.
-* `[SENTENCE] ... [/SENTENCE]` 표시는 화면에 나오지 않습니다. 예문은 자동으로 박스에 담깁니다.
-* `[RED: ...]` 로 감싼 부분은 **빨간 굵은 글씨**로 강조됩니다.
-* 배경지식(`[BG번호]`)은 어휘 카드와 구분되도록 노란 카드로 표시됩니다.
-
-## 라이선스
-
-앱 코드는 자유롭게 사용·수정할 수 있습니다.
-`quizzes/` 안의 문제는 수업용 자료이며, 소설 《Wonder》(R. J. Palacio) 본문에 대한 저작권은 원저작자에게 있습니다.
+앱은 Firebase 콘텐츠 버전만 먼저 확인하고, 변경된 경우에만 해당 퀴즈 또는 어휘
+데이터를 다시 내려받습니다. 구조화된 데이터는 브라우저에 캐시됩니다.
