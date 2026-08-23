@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'wonder-reading-shell-v4';
+const CACHE_VERSION = 'wonder-reading-shell-v7';
 const APP_SHELL = [
     './',
     './index.html',
@@ -11,7 +11,8 @@ const APP_SHELL = [
     './js/config.js',
     './js/firebase-content.js',
     './js/library-cache.js',
-    './js/chapter-organization.js'
+    './js/chapter-organization.js',
+    './js/tts.js'
 ];
 
 self.addEventListener('install', event => {

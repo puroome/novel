@@ -5,10 +5,16 @@ import {
     groupChaptersByCategory,
     sortChaptersForDisplay
 } from './chapter-organization.js';
+import {
+    sentenceTextForSpeech,
+    speakEnglish,
+    splitParentheticalSegments,
+    textOutsideParentheses
+} from './tts.js';
 
 // 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
 // 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-23-firebase-content-fix1';
+const APP_VERSION = '2026-08-24-bg-tts1';
 
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;
@@ -256,6 +262,11 @@ function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, ch => map[ch]);
 }
 
+function ttsTextAttribute(text) {
+    const value = String(text ?? '').trim();
+    return value ? ` data-tts-text="${escapeHtml(value)}"` : '';
+}
+
 // 해설 속 [ENG: ...]는 정답의 근거가 되는 원문입니다.
 // 'ENG:' 표시와 대괄호는 지우고, 원문만 따로 박스에 담아 보여 줍니다.
 function renderExplanation(text) {
@@ -280,7 +291,7 @@ function renderExplanation(text) {
 function renderQuestionExplanation(question) {
     if (!question?.evidence) return renderExplanation(question?.explanation || '해설이 제공되지 않았습니다.');
 
-    const evidence = `<span class="block my-3 px-4 py-3 rounded-lg bg-white border border-gray-300 border-l-4 border-l-blue-400 text-gray-600 font-normal leading-relaxed">${escapeHtml(question.evidence)}</span>`;
+    const evidence = `<span class="block my-3 px-4 py-3 rounded-lg bg-white border border-gray-300 border-l-4 border-l-blue-400 text-gray-600 font-normal leading-relaxed"${ttsTextAttribute(question.evidence)}>${escapeHtml(question.evidence)}</span>`;
     const explanation = question.explanation
         ? `<span class="block">${escapeHtml(question.explanation)}</span>`
         : '';
@@ -332,7 +343,7 @@ function renderDerivativeRow(entries) {
 
     const chips = entries.map(entry => `
         <span class="inline-flex items-baseline gap-1.5 rounded-full border bg-red-50 border-red-100 px-3 py-1 text-sm">
-            <span class="font-semibold text-red-700">${escapeHtml(entry.term)}</span>
+            <span class="font-semibold text-red-700"${ttsTextAttribute(entry.term)}>${escapeHtml(entry.term)}</span>
             ${entry.gloss ? `<span class="text-red-400">${escapeHtml(entry.gloss)}</span>` : ''}
         </span>
     `).join('');
@@ -340,12 +351,28 @@ function renderDerivativeRow(entries) {
     return `<div class="flex flex-wrap gap-2">${chips}</div>`;
 }
 
+function renderCollocationEntry(entry) {
+    const speechText = textOutsideParentheses(entry);
+    if (!speechText) return escapeHtml(entry);
+
+    return splitParentheticalSegments(entry).map(segment => {
+        if (segment.parenthetical || !segment.text.trim()) return escapeHtml(segment.text);
+        return `<span${ttsTextAttribute(speechText)}>${escapeHtml(segment.text)}</span>`;
+    }).join('');
+}
+
 // 연어는 칩을 사용하지 않고, 시트의 세미콜론 단위 값을 한 줄씩 그대로 표시합니다.
 function renderCollocationText(entries) {
     if (!entries || entries.length === 0) return '';
     return `<div class="text-sm text-slate-700 leading-relaxed">${entries
-        .map(entry => escapeHtml(entry))
+        .map(renderCollocationEntry)
         .join('<br>')}</div>`;
+}
+
+function handleTtsClick(event) {
+    const target = event.target.closest?.('[data-tts-text]');
+    if (!target || !event.currentTarget.contains(target)) return;
+    speakEnglish(target.dataset.ttsText);
 }
 
 // --- [6-2단계] 단어 학습장 그리기 ---
@@ -372,10 +399,10 @@ function startWordChapter(index, { historyMode = 'push', animate = true } = {}) 
             card.innerHTML = `
                 <div class="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-3">
                     <span class="shrink-0 text-xs font-bold text-white bg-red-500 rounded-full px-2 py-0.5">${wordNumber}</span>
-                    <span class="text-xl font-bold text-red-700">${escapeHtml(item.word)}</span>
+                    <span class="text-xl font-bold text-red-700"${ttsTextAttribute(item.word)}>${escapeHtml(item.word)}</span>
                     <span class="text-gray-600 font-medium">${escapeHtml(item.meaning)}</span>
                 </div>
-                ${item.sentence ? `<p class="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 border-l-4 border-l-red-400 text-gray-700 leading-relaxed">${renderWordSentence(item.sentence)}</p>` : ''}
+                ${item.sentence ? `<p class="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 border-l-4 border-l-red-400 text-gray-700 leading-relaxed"${ttsTextAttribute(sentenceTextForSpeech(item.sentence))}>${renderWordSentence(item.sentence)}</p>` : ''}
                 ${item.note ? `<p class="mt-3 text-sm text-gray-600 leading-relaxed">${renderMarkedText(item.note)}</p>` : ''}
                 ${(item.derivatives.length + item.collocations.length) > 0 ? `
                 <div class="mt-3 pt-3 border-t border-gray-100 space-y-2">
@@ -386,7 +413,7 @@ function startWordChapter(index, { historyMode = 'push', animate = true } = {}) 
         } else {
             card.className = "border-2 border-amber-200 rounded-xl p-4 bg-amber-50";
             card.innerHTML = `
-                <div class="font-bold text-gray-800">${renderMarkedText(item.title)}</div>
+                <div class="font-bold text-gray-800"${ttsTextAttribute(sentenceTextForSpeech(item.title))}>${renderMarkedText(item.title)}</div>
                 ${item.meaning ? `<p class="mt-2 text-sm font-semibold text-amber-900"><span class="mr-1.5 rounded bg-amber-200 px-1.5 py-0.5 text-xs font-bold text-amber-900">의미</span>${renderMarkedText(item.meaning)}</p>` : ''}
                 ${item.note ? `<p class="mt-3 border-t border-amber-200 pt-3 text-sm text-gray-700 leading-relaxed">${renderMarkedText(item.note)}</p>` : ''}
             `;
@@ -680,6 +707,8 @@ export function startReadingApp({ loadLibrary, prepareLibraryCache }) {
     document.getElementById('next-btn').addEventListener('click', nextQuestion);
     document.getElementById('word-prev-btn').addEventListener('click', () => moveWordChapter(-1));
     document.getElementById('word-next-btn').addEventListener('click', () => moveWordChapter(1));
+    document.getElementById('word-list').addEventListener('click', handleTtsClick);
+    document.getElementById('explanation-box').addEventListener('click', handleTtsClick);
     document.getElementById('result-back-btn').addEventListener('click', () => showScreen('chapter-screen'));
     document.getElementById('continue-yes-btn').addEventListener('click', continueToNextChapter);
     document.getElementById('continue-no-btn').addEventListener('click', goToStart);
