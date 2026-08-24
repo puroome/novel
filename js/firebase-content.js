@@ -34,10 +34,16 @@ function normalizeQuizChapter(chapter) {
     };
 }
 
+export function normalizeFirebaseChapter(kind, chapter) {
+    return kind === 'word' ? normalizeWordChapter(chapter) : normalizeQuizChapter(chapter);
+}
+
 export function normalizeFirebaseChapters(kind, chapters) {
     const normalizedKind = kind === 'word' ? 'word' : 'quiz';
-    const list = denseArray(chapters);
-    return normalizedKind === 'word'
-        ? list.map(normalizeWordChapter)
-        : list.map(normalizeQuizChapter);
+    return denseArray(chapters).map(chapter => normalizeFirebaseChapter(normalizedKind, chapter));
+}
+
+// 챕터 목록은 제목과 개수만 담고 있어 본문 정규화가 필요 없습니다.
+export function normalizeFirebaseIndex(entries) {
+    return denseArray(entries).filter(entry => entry && typeof entry.title === 'string');
 }

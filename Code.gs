@@ -351,15 +351,33 @@ function buildFirebaseContent() {
     });
   });
 
-  const wordChapters = [...wordChapterMap.values()]
-    .sort((left, right) => left.chapterNo - right.chapterNo)
-    .map(({ wordCount, backgroundCount, ...chapter }) => chapter);
+  const wordChapterList = [...wordChapterMap.values()]
+    .sort((left, right) => left.chapterNo - right.chapterNo);
   const quizChapters = [...quizChapterMap.values()]
     .sort((left, right) => left.chapterNo - right.chapterNo)
     .map(chapter => ({
       ...chapter,
       questions: chapter.questions.sort((left, right) => questionNumber(left.id) - questionNumber(right.id)),
     }));
+
+  // 앱은 챕터 목록을 그릴 때 본문이 필요 없습니다. 제목과 개수만 담은 가벼운
+  // 목록을 따로 올려 두면, 학생이 고른 챕터 하나만 받아 볼 수 있습니다.
+  // index와 chapters는 같은 순서라 위치 번호로 서로 짝지어집니다.
+  const wordIndex = wordChapterList.map(chapter => ({
+    chapterNo: chapter.chapterNo,
+    title: chapter.title,
+    partTitle: chapter.partTitle,
+    wordCount: chapter.wordCount,
+    backgroundCount: chapter.backgroundCount,
+  }));
+  const wordChapters = wordChapterList
+    .map(({ wordCount, backgroundCount, ...chapter }) => chapter);
+  const quizIndex = quizChapters.map(chapter => ({
+    chapterNo: chapter.chapterNo,
+    title: chapter.title,
+    partTitle: chapter.partTitle,
+    questionCount: chapter.questions.length,
+  }));
 
   if (wordChapters.length === 0) throw new Error('동기화할 어휘/배경지식 챕터가 없습니다.');
   if (quizChapters.length === 0) throw new Error('동기화할 퀴즈 챕터가 없습니다.');
@@ -384,8 +402,8 @@ function buildFirebaseContent() {
         questionCount: quizRows.length,
       },
     },
-    word: { chapters: wordChapters },
-    quiz: { chapters: quizChapters },
+    word: { index: wordIndex, chapters: wordChapters },
+    quiz: { index: quizIndex, chapters: quizChapters },
   };
 }
 

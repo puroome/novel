@@ -12,37 +12,72 @@ import {
     textOutsideParentheses
 } from './tts.js';
 
-// 이 파일(index.html)을 고칠 때마다 아래 번호를 바꿔 주세요.
-// 브라우저가 예전 화면을 캐시에 물고 있으면 스스로 알아채고 새로 받아옵니다.
-const APP_VERSION = '2026-08-24-bg-tts1';
+// 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
+// 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
+const APP_VERSION = '2026-08-24-cleanup2';
+const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
+// 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
+// version.json만 확인하고, 새 번호가 보이면 캐시를 비운 뒤 한 번만 새로고침합니다.
 async function ensureLatestApp() {
     if (location.protocol === 'file:') return;
 
     try {
-        const res = await fetch(`js/app.js?_=${Date.now()}`, { cache: 'no-store' });
-        if (!res.ok) return;
+        const response = await fetch(`version.json?_=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) return;
 
-        const match = (await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/);
-        if (!match || match[1] === APP_VERSION) return;
+        const { version } = await response.json();
+        if (typeof version !== 'string' || !version || version === APP_VERSION) return;
+        // 배포가 어긋나 있어도 새로고침이 반복되지 않게 합니다.
+        if (readSessionValue(RELOAD_GUARD_KEY) === version) return;
 
-        // 주소에 새 번호를 붙여서 캐시가 아닌 새 파일을 받게 합니다.
-        location.replace(`${location.pathname}?v=${encodeURIComponent(match[1])}`);
+        writeSessionValue(RELOAD_GUARD_KEY, version);
+        await clearShellCaches();
+        location.reload();
     } catch (error) {
         console.warn('앱 버전을 확인하지 못했습니다.', error);
     }
 }
 
-// 전역 변수: 파싱된 전체 데이터와 현재 진행 상태를 저장합니다.
+async function clearShellCaches() {
+    if (!globalThis.caches) return;
+
+    try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(key => caches.delete(key)));
+    } catch (error) {
+        console.warn('오래된 캐시를 지우지 못했습니다.', error);
+    }
+}
+
+function readSessionValue(key) {
+    try {
+        return globalThis.sessionStorage?.getItem(key) ?? null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function writeSessionValue(key, value) {
+    try {
+        globalThis.sessionStorage?.setItem(key, value);
+    } catch (error) {
+        // 저장소를 막아 둔 브라우저에서도 새로고침 자체는 진행합니다.
+    }
+}
+
+// allChapters와 allWordChapters는 제목과 개수만 담은 가벼운 목록입니다.
+// 본문은 학생이 챕터를 고를 때 그 챕터만 받아서 아래 body 변수에 담습니다.
 let allChapters = [];
 let currentChapterIndex = 0;
 let currentQuestionIndex = 0;
+let currentQuizBody = null;     // 지금 풀고 있는 퀴즈 챕터의 본문
 let score = 0;
-let allWordChapters = [];       // 단어장(Word) 챕터
+let allWordChapters = [];       // 단어장(Word) 챕터 목록
 let currentWordChapterIndex = 0;
-let libraryLoadPromise = null;  // 퀴즈/단어장 데이터를 미리 받아 두는 작업
-let libraryLoadMode = null;
-let loadAuthorizedLibrary = null;
+let loadAuthorizedIndex = null;
+let loadAuthorizedChapter = null;
+let chapterOpening = false;     // 챕터를 받는 동안 중복 선택을 막습니다.
 let appStarted = false;
 
 // --- [1단계] 화면 전환 로직 ---
@@ -97,9 +132,7 @@ async function restoreHistoryScreen(state) {
     const libraryMissing = needsWordLibrary ? allWordChapters.length === 0 : allChapters.length === 0;
     if (state.screenId !== 'start-screen' && libraryMissing) {
         try {
-            const requiredMode = needsWordLibrary ? 'word' : 'quiz';
-            if (!libraryLoadPromise || libraryLoadMode !== requiredMode) prefetchLibrary(requiredMode);
-            applyLibrary(await libraryLoadPromise);
+            await requestChapterIndex(needsWordLibrary ? 'word' : 'quiz');
         } catch (error) {
             console.error('이전 화면 복원 오류:', error);
             showScreen('start-screen', { historyMode: 'none' });
@@ -119,21 +152,26 @@ async function restoreHistoryScreen(state) {
         return;
     }
 
-    if (state.screenId === 'word-screen') {
-        const index = Number.isInteger(state.chapterIndex) ? state.chapterIndex : 0;
-        startWordChapter(Math.min(Math.max(index, 0), allWordChapters.length - 1), { historyMode: 'none' });
-        return;
-    }
+    // 본문을 다시 받아야 하므로 실패할 수 있습니다. 뒤로가기가 조용히 깨지지 않게 감쌉니다.
+    try {
+        if (state.screenId === 'word-screen') {
+            const index = Number.isInteger(state.chapterIndex) ? state.chapterIndex : 0;
+            await startWordChapter(Math.min(Math.max(index, 0), allWordChapters.length - 1), { historyMode: 'none' });
+            return;
+        }
 
-    if (state.screenId === 'quiz-screen') {
-        const chapterIndex = Number.isInteger(state.chapterIndex) ? state.chapterIndex : 0;
-        currentChapterIndex = Math.min(Math.max(chapterIndex, 0), allChapters.length - 1);
-        const lastQuestionIndex = allChapters[currentChapterIndex].questions.length - 1;
-        currentQuestionIndex = Math.min(Math.max(state.questionIndex || 0, 0), lastQuestionIndex);
-        score = Number.isInteger(state.score) ? state.score : 0;
-        document.getElementById('current-chapter-title').innerText = formatChapterListLabel(allChapters[currentChapterIndex].title, currentChapterIndex);
-        showScreen('quiz-screen', { historyMode: 'none' });
-        loadQuestion({ syncHistory: false });
+        if (state.screenId === 'quiz-screen') {
+            const chapterIndex = Number.isInteger(state.chapterIndex) ? state.chapterIndex : 0;
+            await startChapter(Math.min(Math.max(chapterIndex, 0), allChapters.length - 1), {
+                historyMode: 'none',
+                questionIndex: state.questionIndex || 0,
+                score: Number.isInteger(state.score) ? state.score : 0
+            });
+            return;
+        }
+    } catch (error) {
+        console.error('이전 챕터를 다시 열지 못했습니다:', error);
+        alertChapterFailure(error);
         return;
     }
 
@@ -149,20 +187,20 @@ async function restoreHistoryScreen(state) {
     showScreen('start-screen', { historyMode: 'none' });
 }
 
-// 시작 화면이 떠 있는 동안 Firebase 버전을 미리 확인합니다.
-// 그래서 'Quiz'나 'Word'를 누르면 대개 기다림 없이 바로 넘어갑니다.
-function prefetchLibrary(mode) {
-    if (!loadAuthorizedLibrary) {
-        libraryLoadPromise = Promise.reject(new Error('로그인 정보가 준비되지 않았습니다.'));
-        return;
-    }
-    const promise = loadAuthorizedLibrary(mode);
-    libraryLoadPromise = promise;
-    libraryLoadMode = mode;
-    promise.then(library => {
-        if (libraryLoadPromise !== promise) return;
-        applyLibrary(library);
-    }).catch(() => {}); // 버튼을 누를 때 오류를 처리하므로 여기서는 넘어갑니다.
+// auth.js가 같은 종류의 요청을 하나로 합쳐 두므로, 시작 화면에서 미리 받아 둔 작업이
+// 있으면 여기서 그대로 이어받습니다. 버전 조회를 다시 하지 않습니다.
+async function requestChapterIndex(mode) {
+    if (!loadAuthorizedIndex) throw new Error('로그인 정보가 준비되지 않았습니다.');
+
+    const result = await loadAuthorizedIndex(mode);
+    applyChapterIndex(result);
+    return result;
+}
+
+// 목록에서 고른 챕터의 본문만 받아 옵니다.
+function requestChapter(mode, entry) {
+    if (!loadAuthorizedChapter) return Promise.reject(new Error('로그인 정보가 준비되지 않았습니다.'));
+    return loadAuthorizedChapter(mode, entry.position);
 }
 
 // --- 'Quiz' / 'Word' 버튼 ---
@@ -184,10 +222,8 @@ async function openLibrary(mode) {
     loadNote.classList.remove('hidden');
 
     try {
-        // 버튼을 누를 때마다 버전을 확인해 방금 동기화한 자료도 즉시 반영합니다.
-        prefetchLibrary(mode);
-        const library = await libraryLoadPromise;
-        applyLibrary(library);
+        // 버전은 Firebase 구독으로 계속 최신이라, 방금 동기화한 자료도 그대로 반영됩니다.
+        await requestChapterIndex(mode);
 
         if (mode === 'quiz') {
             if (allChapters.length === 0) {
@@ -206,8 +242,8 @@ async function openLibrary(mode) {
         }
 
     } catch (error) {
+        // 실패한 요청은 auth.js가 버리므로 버튼을 다시 누르면 새로 시도합니다.
         console.error('불러오기 오류:', error);
-        libraryLoadPromise = null; // 버튼을 다시 누르면 새로 시도합니다.
 
         statusText.classList.remove('text-gray-500');
         statusText.classList.add('text-red-600');
@@ -222,21 +258,19 @@ async function openLibrary(mode) {
     }
 }
 
-function applyLibrary(library) {
-    if (library.quizChapters.length > 0) allChapters = sortChaptersForDisplay(library.quizChapters);
-    if (library.wordChapters.length > 0) allWordChapters = sortChaptersForDisplay(library.wordChapters);
+function applyChapterIndex(result) {
+    if (!result || !Array.isArray(result.entries) || result.entries.length === 0) return;
+
+    if (result.kind === 'word') allWordChapters = sortChaptersForDisplay(result.entries);
+    else allChapters = sortChaptersForDisplay(result.entries);
 }
 
 function describeLoadError(error, mode) {
-    const what = mode === 'word' ? '단어장' : '퀴즈';
+    const what = mode === 'word' ? '어휘' : '퀴즈';
     if (location.protocol === 'file:') {
-        return `HTML 파일을 더블클릭해서 열면 브라우저 보안 정책 때문에 ${what} 파일을 읽을 수 없습니다. 웹 주소(https://)로 접속해 주세요.`;
+        return `HTML 파일을 더블클릭해서 열면 로그인과 Firebase 연결이 막힙니다. 웹 주소(https://)로 접속해 주세요.`;
     }
-    if (/^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname)) {
-        return `${what}을 불러오지 못했습니다. ${error.message || '알 수 없는 오류가 발생했습니다.'} `
-            + `터미널에서 'npm start'로 실행하면 폴더 목록이 자동으로 갱신됩니다.`;
-    }
-    return `${what}을 불러오지 못했습니다. ${error.message || '알 수 없는 오류가 발생했습니다.'}`;
+    return `${what} 자료를 불러오지 못했습니다. ${error.message || '알 수 없는 오류가 발생했습니다.'}`;
 }
 
 // 퀴즈를 풀던 중에 챕터 선택 화면으로 돌아갑니다.
@@ -328,13 +362,39 @@ function renderWordChapterList() {
         container: document.getElementById('word-chapter-list'),
         chapters: allWordChapters,
         theme: 'word',
-        onSelect: index => startWordChapter(index),
+        onSelect: (index, button) => openChapter(() => startWordChapter(index), button),
         getCountLabel: chapter => {
-            const wordCount = chapter.items.filter(item => item.type === 'word').length;
-            const bgCount = chapter.items.length - wordCount;
+            const wordCount = chapter.wordCount || 0;
+            const bgCount = chapter.backgroundCount || 0;
             return bgCount > 0 ? `${wordCount} 단어 · ${bgCount} 배경` : `${wordCount} 단어`;
         }
     });
+}
+
+// 본문을 받는 동안 같은 챕터를 두 번 누르지 않도록 버튼을 잠깐 잠급니다.
+async function openChapter(open, button) {
+    if (chapterOpening) return;
+    chapterOpening = true;
+    button?.classList.add('opacity-50', 'cursor-wait');
+
+    try {
+        await open();
+    } catch (error) {
+        console.error('챕터를 열지 못했습니다:', error);
+        alertChapterFailure(error);
+    } finally {
+        chapterOpening = false;
+        button?.classList.remove('opacity-50', 'cursor-wait');
+    }
+}
+
+function alertChapterFailure(error) {
+    // goToStart가 안내문을 비우므로 화면을 먼저 옮기고 메시지를 씁니다.
+    goToStart();
+    const statusText = document.getElementById('start-status');
+    statusText.classList.remove('text-gray-500');
+    statusText.classList.add('text-red-600');
+    statusText.innerText = error?.message || '챕터를 불러오지 못했습니다.';
 }
 
 // 파생어는 기존처럼 타원형 칩으로 보여 줍니다.
@@ -376,12 +436,16 @@ function handleTtsClick(event) {
 }
 
 // --- [6-2단계] 단어 학습장 그리기 ---
-function startWordChapter(index, { historyMode = 'push', animate = true } = {}) {
-    currentWordChapterIndex = index;
-    const chapter = allWordChapters[index];
-    const wordCount = chapter.items.filter(item => item.type === 'word').length;
+async function startWordChapter(index, { historyMode = 'push', animate = true } = {}) {
+    const entry = allWordChapters[index];
+    if (!entry) return;
 
-    document.getElementById('word-chapter-title').innerText = formatChapterListLabel(chapter.title, index);
+    const chapter = await requestChapter('word', entry);
+    currentWordChapterIndex = index;
+    const items = Array.isArray(chapter.items) ? chapter.items : [];
+    const wordCount = items.filter(item => item.type === 'word').length;
+
+    document.getElementById('word-chapter-title').innerText = formatChapterListLabel(entry.title, index);
     document.getElementById('word-count-text').innerText = `${wordCount} 단어`;
 
     const listContainer = document.getElementById('word-list');
@@ -389,8 +453,10 @@ function startWordChapter(index, { historyMode = 'push', animate = true } = {}) 
     listContainer.scrollTop = 0;
 
     let wordNumber = 0;
+    // 카드를 하나씩 붙이면 그때마다 화면 계산이 다시 돌아갑니다. 한 번에 붙입니다.
+    const fragment = document.createDocumentFragment();
 
-    chapter.items.forEach(item => {
+    items.forEach(item => {
         const card = document.createElement('div');
 
         if (item.type === 'word') {
@@ -419,9 +485,10 @@ function startWordChapter(index, { historyMode = 'push', animate = true } = {}) 
             `;
         }
 
-        listContainer.appendChild(card);
+        fragment.appendChild(card);
     });
 
+    listContainer.appendChild(fragment);
     updateWordChapterNavigation();
     showScreen('word-screen', { historyMode, animate });
 }
@@ -429,7 +496,7 @@ function startWordChapter(index, { historyMode = 'push', animate = true } = {}) 
 function moveWordChapter(direction) {
     const targetIndex = currentWordChapterIndex + direction;
     if (targetIndex < 0 || targetIndex >= allWordChapters.length) return;
-    startWordChapter(targetIndex, { animate: false });
+    openChapter(() => startWordChapter(targetIndex, { animate: false }));
 }
 
 function updateWordChapterNavigation() {
@@ -456,8 +523,8 @@ function renderChapterList() {
         container: document.getElementById('chapter-list'),
         chapters: allChapters,
         theme: 'quiz',
-        onSelect: index => startChapter(index),
-        getCountLabel: chapter => `${chapter.questions.length} 문제`
+        onSelect: (index, button) => openChapter(() => startChapter(index), button),
+        getCountLabel: chapter => `${chapter.questionCount || 0} 문제`
     });
 }
 
@@ -537,7 +604,7 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
                 </span>
                 <span class="shrink-0 text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${escapeHtml(getCountLabel(chapter))}</span>
             `;
-            chapterButton.addEventListener('click', () => onSelect(index));
+            chapterButton.addEventListener('click', () => onSelect(index, chapterButton));
             chapterPanel.appendChild(chapterButton);
         });
 
@@ -554,22 +621,29 @@ function splitCategoryLabel(category) {
 }
 
 // --- [6단계] 퀴즈 실행 로직 ---
-function startChapter(index, { historyMode = 'push' } = {}) {
-    currentChapterIndex = index;
-    currentQuestionIndex = 0;
-    score = 0;
+async function startChapter(index, { historyMode = 'push', questionIndex = 0, score: restoredScore = 0 } = {}) {
+    const entry = allChapters[index];
+    if (!entry) return;
 
-    document.getElementById('current-chapter-title').innerText = formatChapterListLabel(allChapters[currentChapterIndex].title, currentChapterIndex);
+    const chapter = await requestChapter('quiz', entry);
+    const questions = Array.isArray(chapter.questions) ? chapter.questions : [];
+    if (questions.length === 0) throw new Error('이 챕터에는 문제가 없습니다.');
+
+    currentQuizBody = chapter;
+    currentChapterIndex = index;
+    currentQuestionIndex = Math.min(Math.max(questionIndex, 0), questions.length - 1);
+    score = restoredScore;
+
+    document.getElementById('current-chapter-title').innerText = formatChapterListLabel(entry.title, index);
     showScreen('quiz-screen', { historyMode });
-    loadQuestion();
+    loadQuestion({ syncHistory: historyMode !== 'none' });
 }
 
 function loadQuestion({ syncHistory = true } = {}) {
-    const chapter = allChapters[currentChapterIndex];
+    const chapter = currentQuizBody;
     const qData = chapter.questions[currentQuestionIndex];
 
     document.getElementById('progress-text').innerText = `${currentQuestionIndex + 1} / ${chapter.questions.length}`;
-    document.getElementById('question-id').innerText = '❓';
     document.getElementById('question-text').innerText = qData.question;
 
     const optionsContainer = document.getElementById('options-container');
@@ -595,7 +669,7 @@ function loadQuestion({ syncHistory = true } = {}) {
 }
 
 function selectOption(selectedIndex, buttonElement) {
-    const chapter = allChapters[currentChapterIndex];
+    const chapter = currentQuizBody;
     const qData = chapter.questions[currentQuestionIndex];
     const optionsContainer = document.getElementById('options-container');
     const buttons = optionsContainer.getElementsByTagName('button');
@@ -641,7 +715,7 @@ function selectOption(selectedIndex, buttonElement) {
 }
 
 function nextQuestion() {
-    const chapter = allChapters[currentChapterIndex];
+    const chapter = currentQuizBody;
     currentQuestionIndex++;
 
     if (currentQuestionIndex < chapter.questions.length) {
@@ -682,23 +756,24 @@ function continueToNextChapter() {
     closeContinueModal();
 
     if (nextChapterIndex < allChapters.length) {
-        startChapter(nextChapterIndex);
+        openChapter(() => startChapter(nextChapterIndex));
     } else {
         goToStart();
     }
 }
 
-// --- 시작 화면을 보여 주는 동안 퀴즈/단어장 파일을 미리 받아 둡니다 ---
-export function startReadingApp({ loadLibrary, prepareLibraryCache }) {
+// --- 시작 화면을 보여 주는 동안 퀴즈/어휘 자료를 미리 받아 둡니다 ---
+export function startReadingApp({ loadChapterIndex, loadChapter, prepareLibraryCache }) {
     if (appStarted) {
         closeContinueModal();
         document.getElementById('start-status').innerText = '';
         showScreen('start-screen', { historyMode: 'replace' });
-        prepareLibraryCache?.().catch(error => console.warn('기기 캐시 확인 오류:', error));
+        prepareLibraryCache?.().catch(error => console.warn('자료 미리 받기 오류:', error));
         return;
     }
     appStarted = true;
-    loadAuthorizedLibrary = loadLibrary;
+    loadAuthorizedIndex = loadChapterIndex;
+    loadAuthorizedChapter = loadChapter;
     window.history.replaceState(createHistoryState('start-screen'), '', window.location.href);
     window.addEventListener('popstate', event => restoreHistoryScreen(event.state));
     document.getElementById('start-btn').addEventListener('click', startQuiz);
@@ -721,12 +796,14 @@ export function startReadingApp({ loadLibrary, prepareLibraryCache }) {
     document.addEventListener('selectstart', event => event.preventDefault());
     document.addEventListener('contextmenu', event => event.preventDefault());
     document.addEventListener('keydown', handleWordChapterArrowKeys);
-    ensureLatestApp();
-    // 로그인 직후에는 가벼운 Firebase 버전만 확인합니다. 변함이 없다면 버튼을 눌렀을 때
-    // 이 기기에 보관한 구조화 데이터를 즉시 사용합니다.
-    prepareLibraryCache?.().catch(error => console.warn('기기 캐시 확인 오류:', error));
+    // 시작 화면이 떠 있는 동안 챕터까지 실제로 받아 둡니다. 캐시가 최신이면 아무것도
+    // 내려받지 않고, 낡았을 때만 채워 넣으므로 버튼을 눌렀을 때 기다림이 없습니다.
+    prepareLibraryCache?.().catch(error => console.warn('자료 미리 받기 오류:', error));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 로그인과 나란히 확인합니다. 새 버전 때문에 새로고침하더라도 로그인을 두 번
+    // 기다리지 않습니다.
+    ensureLatestApp();
     initializeNovelAuth({ startReadingApp });
 });

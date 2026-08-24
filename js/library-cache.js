@@ -1,44 +1,194 @@
-const CACHE_PREFIX = 'novel-firebase-library-cache-v2';
+// 예전에는 라이브러리 전체를 문자열 하나로 localStorage에 넣었습니다. 자료가 늘면
+// 5MB 한도에 걸려 저장이 조용히 실패하고, 매 실행 전체를 다시 받게 됩니다.
+// IndexedDB는 한도가 훨씬 넉넉하고 객체를 그대로 보관하므로 JSON.parse로 메인
+// 스레드를 붙잡지도 않습니다. 챕터를 따로 저장해서 받은 것만 쌓아 둘 수 있습니다.
+const DATABASE_NAME = 'wonder-library';
+const DATABASE_VERSION = 1;
+const STORE_NAME = 'entries';
+const LEGACY_CACHE_PREFIX = 'novel-firebase-library-cache-v2';
+
+let databasePromise = null;
 
 function normalizeKind(kind) {
     return kind === 'word' ? 'word' : 'quiz';
 }
 
-export function libraryCacheKey(kind) {
-    return `${CACHE_PREFIX}:${normalizeKind(kind)}`;
+export function indexCacheKey(kind) {
+    return `index:${normalizeKind(kind)}`;
 }
 
-// Firebase 콘텐츠 버전과 구조화된 챕터를 함께 저장합니다.
-export function readLibraryCache(kind, storage = globalThis.localStorage) {
-    try {
-        const raw = storage?.getItem(libraryCacheKey(kind));
-        if (!raw) return null;
+export function chapterCacheKey(kind, position) {
+    return `chapter:${normalizeKind(kind)}:${position}`;
+}
 
-        const cached = JSON.parse(raw);
-        if (typeof cached?.version !== 'string' || !Array.isArray(cached.chapters)) return null;
-        return cached;
+function openDatabase() {
+    if (databasePromise) return databasePromise;
+
+    databasePromise = new Promise((resolve, reject) => {
+        const indexedDb = globalThis.indexedDB;
+        if (!indexedDb) {
+            reject(new Error('이 브라우저는 IndexedDB를 지원하지 않습니다.'));
+            return;
+        }
+
+        const request = indexedDb.open(DATABASE_NAME, DATABASE_VERSION);
+        request.onupgradeneeded = () => {
+            const database = request.result;
+            if (!database.objectStoreNames.contains(STORE_NAME)) {
+                database.createObjectStore(STORE_NAME);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+        request.onblocked = () => reject(new Error('IndexedDB가 다른 탭에 잠겨 있습니다.'));
+    });
+
+    // 실패를 기억해 두면 이후 호출이 모두 막히므로 다음 시도를 위해 비웁니다.
+    databasePromise.catch(() => {
+        databasePromise = null;
+    });
+    return databasePromise;
+}
+
+function runTransaction(mode, run) {
+    return openDatabase().then(database => new Promise((resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, mode);
+        const store = transaction.objectStore(STORE_NAME);
+        let result;
+
+        try {
+            result = run(store);
+        } catch (error) {
+            reject(error);
+            return;
+        }
+
+        transaction.oncomplete = () => resolve(result?.value ?? result ?? null);
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+    }));
+}
+
+function readRequest(store, key) {
+    const request = store.get(key);
+    const holder = { value: null };
+    request.onsuccess = () => {
+        holder.value = request.result ?? null;
+    };
+    return holder;
+}
+
+// 캐시는 있으면 좋은 것이라, 어떤 이유로 막혀 있어도 앱은 계속 돌아가야 합니다.
+async function safely(operation, fallback, message) {
+    try {
+        return await operation();
     } catch (error) {
-        console.warn('기기에 저장한 라이브러리를 읽지 못했습니다.', error);
-        return null;
+        console.warn(message, error);
+        return fallback;
     }
 }
 
-export function saveLibraryCache(kind, { version, chapters }, storage = globalThis.localStorage) {
-    if (typeof version !== 'string' || !Array.isArray(chapters)) return false;
-    try {
-        storage?.setItem(libraryCacheKey(kind), JSON.stringify({ version, chapters }));
-        return true;
-    } catch (error) {
-        // 저장 공간이 부족하거나 브라우저가 저장소를 막아도 Firebase 이용은 계속합니다.
-        console.warn('라이브러리를 기기에 저장하지 못했습니다.', error);
-        return false;
-    }
+export function readChapterIndex(kind) {
+    return safely(
+        async () => {
+            const entry = await runTransaction('readonly', store => readRequest(store, indexCacheKey(kind)));
+            if (typeof entry?.version !== 'string' || !Array.isArray(entry.index)) return null;
+            return entry;
+        },
+        null,
+        '기기에 저장한 챕터 목록을 읽지 못했습니다.'
+    );
 }
 
-export function clearLibraryCache(kind, storage = globalThis.localStorage) {
+export function saveChapterIndex(kind, { version, index }) {
+    if (typeof version !== 'string' || !Array.isArray(index)) return Promise.resolve(false);
+
+    return safely(
+        async () => {
+            await runTransaction('readwrite', store => store.put({ version, index }, indexCacheKey(kind)));
+            return true;
+        },
+        false,
+        '챕터 목록을 기기에 저장하지 못했습니다.'
+    );
+}
+
+export function readCachedChapter(kind, position, version) {
+    return safely(
+        async () => {
+            const entry = await runTransaction('readonly', store => readRequest(store, chapterCacheKey(kind, position)));
+            if (!entry?.chapter || entry.version !== version) return null;
+            return entry.chapter;
+        },
+        null,
+        '기기에 저장한 챕터를 읽지 못했습니다.'
+    );
+}
+
+export function saveCachedChapter(kind, position, { version, chapter }) {
+    if (typeof version !== 'string' || !chapter) return Promise.resolve(false);
+
+    return safely(
+        async () => {
+            await runTransaction('readwrite', store => store.put({ version, chapter }, chapterCacheKey(kind, position)));
+            return true;
+        },
+        false,
+        '챕터를 기기에 저장하지 못했습니다.'
+    );
+}
+
+export function saveCachedChapters(kind, version, chapters) {
+    if (typeof version !== 'string' || !Array.isArray(chapters)) return Promise.resolve(false);
+
+    // 한 트랜잭션에 몰아 담아야 챕터 수만큼 쓰기가 갈라지지 않습니다.
+    return safely(
+        async () => {
+            await runTransaction('readwrite', store => {
+                chapters.forEach((chapter, position) => {
+                    store.put({ version, chapter }, chapterCacheKey(kind, position));
+                });
+            });
+            return true;
+        },
+        false,
+        '챕터를 기기에 저장하지 못했습니다.'
+    );
+}
+
+// 버전이 바뀌면 그 종류의 기록만 전부 지웁니다.
+export function clearLibraryCache(kind) {
+    const normalizedKind = normalizeKind(kind);
+    const indexKey = indexCacheKey(normalizedKind);
+    const chapterPrefix = `chapter:${normalizedKind}:`;
+
+    return safely(
+        async () => {
+            await runTransaction('readwrite', store => {
+                store.delete(indexKey);
+                const request = store.getAllKeys();
+                request.onsuccess = () => {
+                    (request.result || [])
+                        .filter(key => typeof key === 'string' && key.startsWith(chapterPrefix))
+                        .forEach(key => store.delete(key));
+                };
+            });
+            return true;
+        },
+        false,
+        '기기에 저장한 자료를 지우지 못했습니다.'
+    );
+}
+
+// 예전 방식으로 쌓아 둔 localStorage 덩어리는 이제 쓰지 않으므로 자리를 비웁니다.
+export function migrateLegacyLibraryCache(storage = globalThis.localStorage) {
     try {
-        storage?.removeItem(libraryCacheKey(kind));
+        if (!storage) return 0;
+        const staleKeys = Object.keys(storage).filter(key => key.startsWith(LEGACY_CACHE_PREFIX));
+        staleKeys.forEach(key => storage.removeItem(key));
+        return staleKeys.length;
     } catch (error) {
-        console.warn('기기에 저장한 라이브러리를 지우지 못했습니다.', error);
+        console.warn('예전 캐시를 정리하지 못했습니다.', error);
+        return 0;
     }
 }

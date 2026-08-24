@@ -3,13 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Wonder 독서 퀴즈</title>
     <meta name="theme-color" content="#1e293b">
     <link rel="icon" href="icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="manifest" href="manifest.json">
-    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase SDK는 로그인 직후 바로 필요합니다. 미리 연결해 두면 내려받기가 겹쳐 돌아갑니다. -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js" crossorigin>
+    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js" crossorigin>
+    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js" crossorigin>
+
+    <!-- 미리 만들어 둔 CSS입니다. 클래스를 고쳤다면 `npm run build:css`를 실행하세요. -->
+    <link rel="stylesheet" href="styles.css">
     <style>
         html, body {
             height: 100%;
@@ -187,7 +194,7 @@
             </div>
 
             <div class="flex gap-2 text-lg font-bold text-gray-800 mb-6 leading-relaxed">
-                <span id="question-id" class="shrink-0">[Q1]</span>
+                <span class="shrink-0">❓</span>
                 <span id="question-text">질문이 여기에 표시됩니다.</span>
             </div>
 
