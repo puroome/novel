@@ -1,12 +1,21 @@
 const ALLOWED_USERS_SHEET_NAME = 'AllowedUsers';
-const WORD_SHEET_NAME = 'word';
-const BACKGROUND_SHEET_NAME = 'bg';
-const QUIZ_SHEET_NAME = 'quiz';
+const NOVELS_SHEET_NAME = 'novels';
+
+// 소설마다 시트를 세 벌 둡니다. 이름은 '{소설 id}_{종류}' 규칙으로 만듭니다.
+// 예: wonder_word, wonder_bg, wonder_quiz, tiger_word, ...
+const SHEET_KINDS = { word: 'word', background: 'bg', quiz: 'quiz' };
+function sheetNameFor(novelId, kind) {
+  return `${novelId}_${kind}`;
+}
 
 const FIREBASE_ROOT_PATH = 'novel';
 const FIREBASE_ALLOWED_USERS_PATH = `${FIREBASE_ROOT_PATH}/allowedUsers`;
 const FIREBASE_CONTENT_PATH = `${FIREBASE_ROOT_PATH}/content`;
 const CONTENT_SCHEMA_VERSION = 1;
+
+// 소설 목록은 content 아래에 둡니다. 보안 규칙이 이미 content를 승인된 사용자에게만
+// 열어 두고 있어, 규칙을 건드리지 않고도 앱이 목록을 읽을 수 있습니다.
+const NOVELS_CONTENT_KEY = 'novels';
 
 const NOVEL_SHEET_ID = '1ttEBEw7Vs59p7zCy4IaHK3JsDxPj34GNr82pFNCmcS4';
 const FIREBASE_WEB_API_KEY = 'AIzaSyCafyN3HAOqJSt41ZgZj8AF5GvkMW6z-ZE';
@@ -23,6 +32,68 @@ const QUIZ_HEADERS = [
   'choice_1', 'choice_2', 'choice_3', 'choice_4',
   'answer', 'evidence', 'explanation',
 ];
+const NOVELS_HEADERS = ['id', 'title', 'author', 'cover', 'order', 'active'];
+
+/**
+ * novels 시트를 읽어 active=yes인 소설을 order 순으로 돌려줍니다.
+ * 여기서 얻은 id가 시트 이름 접두어이자 AllowedUsers의 열 이름입니다.
+ */
+function readNovels() {
+  const sheet = getNovelSpreadsheet().getSheetByName(NOVELS_SHEET_NAME);
+  if (!sheet) throw new Error(`'${NOVELS_SHEET_NAME}' 시트를 찾을 수 없습니다.`);
+
+  const values = sheet.getDataRange().getDisplayValues();
+  const columns = buildHeaderMap(values[0] || []);
+  const missingHeaders = NOVELS_HEADERS.filter(header => columns[header] === undefined);
+  if (missingHeaders.length) {
+    throw new Error(`'${NOVELS_SHEET_NAME}' 시트 헤더가 없습니다: ${missingHeaders.join(', ')}`);
+  }
+
+  const novels = [];
+  const seen = new Set();
+
+  values.slice(1).forEach((row, rowOffset) => {
+    const rowNumber = rowOffset + 2;
+    const id = String(row[columns.id] || '').trim();
+    if (!id) return;
+
+    if (!/^[a-z][a-z0-9_]*$/.test(id)) {
+      throw new Error(`${NOVELS_SHEET_NAME} ${rowNumber}행: id는 영문 소문자로 시작하고 소문자·숫자·밑줄만 쓸 수 있습니다: ${id}`);
+    }
+    if (id === NOVELS_CONTENT_KEY) {
+      throw new Error(`${NOVELS_SHEET_NAME} ${rowNumber}행: '${NOVELS_CONTENT_KEY}'는 목록 자체를 담는 이름이라 id로 쓸 수 없습니다.`);
+    }
+    if (seen.has(id)) throw new Error(`${NOVELS_SHEET_NAME} ${rowNumber}행: 중복된 id입니다: ${id}`);
+    seen.add(id);
+
+    const title = String(row[columns.title] || '').trim();
+    if (!title) throw new Error(`${NOVELS_SHEET_NAME} ${rowNumber}행: title이 비어 있습니다.`);
+
+    if (!parseYesNo(row[columns.active], 'active', rowNumber)) return;
+
+    const order = Number.parseInt(String(row[columns.order] || '').trim(), 10);
+    novels.push({
+      id,
+      title,
+      author: String(row[columns.author] || '').trim(),
+      cover: String(row[columns.cover] || '').trim(),
+      order: Number.isFinite(order) ? order : Number.MAX_SAFE_INTEGER,
+    });
+  });
+
+  if (novels.length === 0) throw new Error(`'${NOVELS_SHEET_NAME}' 시트에 active=yes인 소설이 없습니다.`);
+
+  return novels
+    .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
+    .map(({ order, ...novel }) => novel);
+}
+
+/** 소설 id 하나를 novels 시트에서 찾습니다. */
+function findNovel(novelId) {
+  const novel = getNovels().find(candidate => candidate.id === novelId);
+  if (!novel) throw new Error(`'${novelId}'는 ${NOVELS_SHEET_NAME} 시트에 없거나 active=yes가 아닙니다.`);
+  return novel;
+}
 
 /** 스프레드시트를 열 때 사용자 명단과 학습 자료 동기화 메뉴를 추가합니다. */
 function onOpen() {
@@ -30,16 +101,24 @@ function onOpen() {
     .createMenu('📚 Novel Firebase')
     .addItem('허용 명단 동기화', 'syncAllowedUsersToFirebase')
     .addSeparator()
-    .addItem('학습 자료 동기화', 'syncContentToFirebase')
+    .addItem('학습 자료 동기화 (전체)', 'syncContentToFirebase')
+    .addItem('학습 자료 동기화 (소설 하나)', 'syncOneNovelToFirebase')
     .addToUi();
 }
 
 /** AllowedUsers 시트를 Firebase에 동기화합니다. */
 function syncAllowedUsersToFirebase() {
   try {
+    // 느릴 때 어느 단계가 범인인지 바로 알 수 있게 구간별로 시간을 잽니다.
+    const timer = startTimer();
+
     const users = readAllowedUsers();
+    timer.mark('시트 읽기');
+
     const syncedAt = new Date().toISOString();
     const identities = callFirebaseRtdb(`${FIREBASE_ROOT_PATH}/userIdentities`, 'GET') || {};
+    timer.mark('Firebase 읽기');
+
     const accessByUid = buildAccessByUid(users, identities, syncedAt);
     const payload = { syncedAt, users };
 
@@ -48,10 +127,12 @@ function syncAllowedUsersToFirebase() {
       allowedUsers: payload,
       accessByUid: Object.keys(accessByUid).length > 0 ? accessByUid : null,
     });
+    timer.mark('Firebase 쓰기');
 
     const allowedCount = Object.values(users).filter(user => user.permission).length;
     SpreadsheetApp.getUi().alert(
       `동기화 완료\n전체 ${Object.keys(users).length}명 · 앱 접근 허용 ${allowedCount}명`
+      + `\n\n${timer.report()}`
     );
   } catch (error) {
     SpreadsheetApp.getUi().alert(`동기화 실패\n${error.message}`);
@@ -59,23 +140,78 @@ function syncAllowedUsersToFirebase() {
   }
 }
 
-/** word / bg / quiz 시트를 검증하고 앱이 바로 읽을 구조로 Firebase에 저장합니다. */
+/**
+ * 모든 소설의 시트를 검증하고 Firebase의 content 전체를 갈아 끼웁니다.
+ * 통째로 PUT하므로 active=no로 내린 소설과 예전 구조의 잔재가 함께 정리됩니다.
+ */
 function syncContentToFirebase() {
   try {
-    const content = buildFirebaseContent();
-    callFirebaseRtdb(FIREBASE_CONTENT_PATH, 'PUT', content);
+    const novels = getNovels();
+    const content = { [NOVELS_CONTENT_KEY]: novels };
+    const summaries = novels.map(novel => {
+      content[novel.id] = buildNovelContent(novel);
+      return describeNovelContent(novel, content[novel.id]);
+    });
 
-    const wordInfo = content.manifest.word;
-    const quizInfo = content.manifest.quiz;
-    SpreadsheetApp.getUi().alert(
-      `학습 자료 동기화 완료\n`
-      + `어휘 ${wordInfo.wordCount}개 · 배경 ${wordInfo.backgroundCount}개 · `
-      + `퀴즈 ${quizInfo.questionCount}개`
-    );
+    callFirebaseRtdb(FIREBASE_CONTENT_PATH, 'PUT', content);
+    SpreadsheetApp.getUi().alert(`학습 자료 동기화 완료\n\n${summaries.join('\n')}`);
   } catch (error) {
     SpreadsheetApp.getUi().alert(`학습 자료 동기화 실패\n${error.message}`);
     throw error;
   }
+}
+
+/**
+ * 소설 하나만 동기화합니다. 다른 소설의 시트는 읽지도 않으므로,
+ * 작업 중인 소설에 오타가 있어도 나머지 소설의 자료는 그대로 남습니다.
+ */
+function syncOneNovelToFirebase() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const novels = getNovels();
+    const response = ui.prompt(
+      '소설 하나만 동기화',
+      `동기화할 소설 id를 입력하세요.\n\n${novels.map(novel => `${novel.id} — ${novel.title}`).join('\n')}`,
+      ui.ButtonSet.OK_CANCEL
+    );
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+
+    const novel = findNovel(String(response.getResponseText() || '').trim());
+    const content = buildNovelContent(novel);
+
+    // 목록도 함께 올려 두어야, 새로 추가한 소설이 앱에 바로 나타납니다.
+    callFirebaseRtdb(`${FIREBASE_CONTENT_PATH}/${novel.id}`, 'PUT', content);
+    callFirebaseRtdb(`${FIREBASE_CONTENT_PATH}/${NOVELS_CONTENT_KEY}`, 'PUT', novels);
+
+    ui.alert(`동기화 완료\n\n${describeNovelContent(novel, content)}`);
+  } catch (error) {
+    ui.alert(`동기화 실패\n${error.message}`);
+    throw error;
+  }
+}
+
+/** 구간별 소요 시간을 재서 사람이 읽을 수 있게 정리합니다. */
+function startTimer() {
+  const started = Date.now();
+  let previous = started;
+  const marks = [];
+
+  return {
+    mark(label) {
+      const now = Date.now();
+      marks.push(`${label}: ${((now - previous) / 1000).toFixed(1)}초`);
+      previous = now;
+    },
+    report() {
+      return `${marks.join('\n')}\n합계: ${((Date.now() - started) / 1000).toFixed(1)}초`;
+    },
+  };
+}
+
+function describeNovelContent(novel, content) {
+  const word = content.manifest.word;
+  const quiz = content.manifest.quiz;
+  return `${novel.title} — 어휘 ${word.wordCount}개 · 배경 ${word.backgroundCount}개 · 퀴즈 ${quiz.questionCount}개`;
 }
 
 /**
@@ -170,7 +306,16 @@ function toClientUser(email, user) {
     name: String(user?.name || '').trim(),
     grade: String(user?.grade || '').trim(),
     edit: Boolean(user?.edit),
+    // 앱은 이 목록에 있는 소설만 시작 화면에 보여 줍니다.
+    novels: allowedNovelIds(user),
   };
+}
+
+/** 사용자가 볼 수 있는 소설 id만 배열로 추립니다. */
+function allowedNovelIds(user) {
+  const novels = user?.novels;
+  if (!novels || typeof novels !== 'object') return [];
+  return Object.keys(novels).filter(id => novels[id] === true);
 }
 
 function requestAccess(account, name, grade) {
@@ -222,6 +367,24 @@ function syncFirebaseIdentity(account, allowedUser) {
   callFirebaseRtdb(FIREBASE_ROOT_PATH, 'PATCH', patch);
 }
 
+/**
+ * AllowedUsers의 소설별 열을 읽습니다. 열 이름은 novels 시트의 id와 같아야 합니다.
+ * 전체 접근이 막힌 사용자는 소설 열과 무관하게 모두 false가 됩니다.
+ */
+function readNovelPermissions(row, columns, rowNumber, permission, novels) {
+  const result = {};
+  novels.forEach(novel => {
+    if (columns[novel.id] === undefined) {
+      throw new Error(
+        `${ALLOWED_USERS_SHEET_NAME} 시트에 '${novel.id}' 열이 없습니다. `
+        + `novels 시트의 id마다 같은 이름의 열을 만들고 yes 또는 no를 입력하세요.`
+      );
+    }
+    result[novel.id] = permission && parseYesNo(row[columns[novel.id]], novel.id, rowNumber);
+  });
+  return result;
+}
+
 function buildAccessByUid(users, identities, updatedAt) {
   const accessByUid = {};
   Object.entries(identities || {}).forEach(([emailKey, identity]) => {
@@ -231,6 +394,9 @@ function buildAccessByUid(users, identities, updatedAt) {
     accessByUid[uid] = {
       permission: true,
       email: user.email,
+      // 지금은 앱 화면에서만 소설을 가리지만, 보안 규칙을 소설별로 켤 때
+      // 이 값을 그대로 쓰면 Apps Script를 다시 고치지 않아도 됩니다.
+      novels: user.novels || {},
       updatedAt,
     };
   });
@@ -262,7 +428,12 @@ function findSheetUser(email) {
   };
 }
 
-function buildFirebaseContent() {
+/** 소설 하나의 세 시트를 검증하고 앱이 바로 읽을 구조로 만듭니다. */
+function buildNovelContent(novel) {
+  const WORD_SHEET_NAME = sheetNameFor(novel.id, SHEET_KINDS.word);
+  const BACKGROUND_SHEET_NAME = sheetNameFor(novel.id, SHEET_KINDS.background);
+  const QUIZ_SHEET_NAME = sheetNameFor(novel.id, SHEET_KINDS.quiz);
+
   const wordRows = readSheetRecords(WORD_SHEET_NAME, WORD_HEADERS);
   const backgroundRows = readSheetRecords(BACKGROUND_SHEET_NAME, BACKGROUND_HEADERS);
   const quizRows = readSheetRecords(QUIZ_SHEET_NAME, QUIZ_HEADERS);
@@ -326,7 +497,12 @@ function buildFirebaseContent() {
 
   quizRows.forEach(row => {
     const metadata = registerChapter(row, QUIZ_SHEET_NAME, quizChapterMetadata, false);
+    // quiz 시트에는 part_title 열이 없습니다. 같은 챕터의 word/bg 행에서 물려받습니다.
+    if (!metadata.partTitle) {
+      metadata.partTitle = wordChapterMetadata.get(metadata.chapterNo)?.partTitle || '';
+    }
     const chapter = getOrCreateQuizChapter(quizChapterMap, metadata);
+    if (!chapter.partTitle && metadata.partTitle) chapter.partTitle = metadata.partTitle;
     assertRequiredValues(row, [
       'question_no', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4',
       'answer', 'evidence', 'explanation',
@@ -379,8 +555,8 @@ function buildFirebaseContent() {
     questionCount: chapter.questions.length,
   }));
 
-  if (wordChapters.length === 0) throw new Error('동기화할 어휘/배경지식 챕터가 없습니다.');
-  if (quizChapters.length === 0) throw new Error('동기화할 퀴즈 챕터가 없습니다.');
+  if (wordChapters.length === 0) throw new Error(`'${WORD_SHEET_NAME}'에 동기화할 어휘/배경지식 챕터가 없습니다.`);
+  if (quizChapters.length === 0) throw new Error(`'${QUIZ_SHEET_NAME}'에 동기화할 퀴즈 챕터가 없습니다.`);
 
   const syncedAt = new Date().toISOString();
   const wordVersion = contentDigest({ schemaVersion: CONTENT_SCHEMA_VERSION, chapters: wordChapters });
@@ -441,7 +617,9 @@ function registerChapter(row, sheetName, chapterMetadata, requiresPartTitle) {
   );
   const chapterNo = parsePositiveInteger(row.chapter_no, row, sheetName, 'chapter_no');
   const chapterTitle = row.chapter_title;
-  const partTitle = partTitleForChapter(chapterNo);
+  // 파트 구성은 소설마다 다릅니다. 챕터 번호로 계산하지 않고 시트 값을 그대로 씁니다.
+  // quiz 시트에는 part_title 열이 없어, 같은 챕터의 word/bg 행에서 채워집니다.
+  const partTitle = requiresPartTitle ? row.part_title : '';
   const existing = chapterMetadata.get(chapterNo);
 
   if (existing) {
@@ -545,17 +723,6 @@ function questionNumber(id) {
   return Number.parseInt(String(id).replace(/^Q/i, ''), 10) || 0;
 }
 
-function partTitleForChapter(chapterNo) {
-  if (chapterNo <= 31) return 'Part One: August';
-  if (chapterNo <= 47) return 'Part Two: Via';
-  if (chapterNo <= 53) return 'Part Three: Summer';
-  if (chapterNo <= 73) return 'Part Four: Jack';
-  if (chapterNo <= 81) return 'Part Five: Justin';
-  if (chapterNo <= 92) return 'Part Six: August';
-  if (chapterNo <= 98) return 'Part Seven: Miranda';
-  return 'Part Eight: August';
-}
-
 function contentDigest(value) {
   const bytes = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
@@ -570,8 +737,27 @@ function sheetRowError(row, sheetName, message) {
   return new Error(`${prefix}${row._rowNumber}행: ${message}`);
 }
 
+// 이 스크립트는 스프레드시트에 붙어 있으므로 getActive()가 이미 열린 문서를 그대로
+// 돌려줍니다. openById()는 같은 문서를 매번 새로 가져오고 권한을 다시 확인해서
+// 훨씬 느립니다. getActive()를 못 쓰는 경우(독립 실행)에만 openById로 넘어갑니다.
+let cachedNovelSpreadsheet = null;
+
 function getNovelSpreadsheet() {
-  return SpreadsheetApp.openById(NOVEL_SHEET_ID);
+  if (cachedNovelSpreadsheet) return cachedNovelSpreadsheet;
+
+  cachedNovelSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (!cachedNovelSpreadsheet || cachedNovelSpreadsheet.getId() !== NOVEL_SHEET_ID) {
+    cachedNovelSpreadsheet = SpreadsheetApp.openById(NOVEL_SHEET_ID);
+  }
+  return cachedNovelSpreadsheet;
+}
+
+// novels 시트도 동기화 한 번에 여러 번 읽힙니다. 같은 실행 안에서는 한 번만 읽습니다.
+let cachedNovels = null;
+
+function getNovels() {
+  if (!cachedNovels) cachedNovels = readNovels();
+  return cachedNovels;
 }
 
 function readAllowedUsers() {
@@ -591,6 +777,7 @@ function readAllowedUsers() {
     );
   }
 
+  const novels = getNovels();
   const users = {};
   values.slice(1).forEach((row, rowOffset) => {
     const rowNumber = rowOffset + 2;
@@ -613,6 +800,8 @@ function readAllowedUsers() {
       grade: String(row[columns.grade] || '').trim(),
       permission,
       edit,
+      // 소설별 접근 권한. Permission=no면 소설 열이 yes여도 모두 막습니다.
+      novels: readNovelPermissions(row, columns, rowNumber, permission, novels),
       updatedAt: new Date().toISOString(),
     };
   });

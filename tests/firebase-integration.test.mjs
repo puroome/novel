@@ -7,12 +7,16 @@ import test from 'node:test';
 test('Apps Script가 시트 콘텐츠를 Firebase 구조로 동기화한다', async () => {
     const code = await readFile(new URL('../Code.gs', import.meta.url), 'utf8');
 
-    assert.match(code, /const WORD_SHEET_NAME = 'word'/);
-    assert.match(code, /const BACKGROUND_SHEET_NAME = 'bg'/);
-    assert.match(code, /const QUIZ_SHEET_NAME = 'quiz'/);
+    // 소설마다 시트를 세 벌 두고 '{id}_{종류}'로 찾습니다.
+    assert.match(code, /const SHEET_KINDS = \{ word: 'word', background: 'bg', quiz: 'quiz' \}/);
+    assert.match(code, /function sheetNameFor\(novelId, kind\)/);
+    assert.match(code, /const NOVELS_SHEET_NAME = 'novels'/);
     assert.match(code, /function syncContentToFirebase\(\)/);
+    assert.match(code, /function syncOneNovelToFirebase\(\)/);
     assert.match(code, /accessByUid/);
     assert.doesNotMatch(code, /DriveApp/);
+    // 파트 경계를 챕터 번호로 계산하던 Wonder 전용 코드는 없어야 합니다.
+    assert.doesNotMatch(code, /partTitleForChapter/);
 });
 
 test('앱이 승인 후 Firebase Database에서 콘텐츠를 직접 읽는다', async () => {
@@ -20,6 +24,9 @@ test('앱이 승인 후 Firebase Database에서 콘텐츠를 직접 읽는다', 
 
     assert.match(auth, /firebase-database\.js/);
     assert.match(auth, /novel\/content/);
+    // 경로와 캐시 키에 소설 id가 들어가야 소설끼리 자료가 섞이지 않습니다.
+    assert.match(auth, /function novelContentPath\(\)/);
+    assert.match(auth, /readChapterIndex\(activeNovelId, kind\)/);
     assert.match(auth, /get\(ref\(database/);
     assert.doesNotMatch(auth, /callScript\(['"]library/);
     assert.doesNotMatch(auth, /library-loader/);

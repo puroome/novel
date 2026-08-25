@@ -6,13 +6,20 @@ import {
     migrateLegacyLibraryCache
 } from '../js/library-cache.js';
 
-test('캐시 키는 종류와 챕터 위치로 나뉜다', () => {
-    assert.equal(indexCacheKey('quiz'), 'index:quiz');
-    assert.equal(indexCacheKey('word'), 'index:word');
+test('캐시 키는 소설과 종류와 챕터 위치로 나뉜다', () => {
+    assert.equal(indexCacheKey('wonder', 'quiz'), 'index:wonder:quiz');
+    assert.equal(indexCacheKey('wonder', 'word'), 'index:wonder:word');
     // 알 수 없는 값은 quiz로 취급합니다.
-    assert.equal(indexCacheKey('mystery'), 'index:quiz');
-    assert.equal(chapterCacheKey('word', 12), 'chapter:word:12');
-    assert.notEqual(chapterCacheKey('quiz', 12), chapterCacheKey('word', 12));
+    assert.equal(indexCacheKey('wonder', 'mystery'), 'index:wonder:quiz');
+    assert.equal(chapterCacheKey('wonder', 'word', 12), 'chapter:wonder:word:12');
+    assert.notEqual(chapterCacheKey('wonder', 'quiz', 12), chapterCacheKey('wonder', 'word', 12));
+});
+
+// 소설이 둘 이상이면 키가 겹치지 않아야 합니다. 겹치면 두 번째 소설을 열었을 때
+// 첫 소설의 챕터를 덮어써서 엉뚱한 자료를 보여 주게 됩니다.
+test('소설이 다르면 캐시 키도 다르다', () => {
+    assert.notEqual(indexCacheKey('wonder', 'quiz'), indexCacheKey('tiger', 'quiz'));
+    assert.notEqual(chapterCacheKey('wonder', 'word', 3), chapterCacheKey('tiger', 'word', 3));
 });
 
 test('예전 localStorage 덩어리를 정리한다', () => {

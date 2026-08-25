@@ -6,16 +6,20 @@ import test from 'node:test';
 import { normalizeFirebaseChapter, normalizeFirebaseIndex } from '../js/firebase-content.js';
 
 const sheets = {
-    word: [
+    novels: [
+        ['id', 'title', 'author', 'cover', 'order', 'active'],
+        ['wonder', 'Wonder', 'R. J. Palacio', 'wonder.webp', '1', 'yes']
+    ],
+    wonder_word: [
         ['part_title', 'chapter_no', 'chapter_title', 'word', 'meaning', 'relative', 'collocation', 'sentence', 'page'],
         ['Part One: August', '1', 'Ordinary', 'ordinary', '평범한', 'ordinarily (보통)', 'ordinary life (평범한 삶)', 'I feel [ordinary].', '11'],
         ['Part One: August', '2', 'Why I Didn\'t Go to School', 'nervous', '긴장한', 'nervously (초조하게)', 'get nervous (긴장하다)', 'I was [nervous].', '13']
     ],
-    bg: [
+    wonder_bg: [
         ['part_title', 'chapter_no', 'chapter_title', 'eng', 'kor', 'remark'],
         ['Part One: August', '1', 'Ordinary', 'a magic lamp', '요술 램프', '소원을 이루어 주는 램프입니다.']
     ],
-    quiz: [
+    wonder_quiz: [
         ['chapter_no', 'chapter_title', 'question_no', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4', 'answer', 'evidence', 'explanation'],
         ['1', 'Ordinary', '1', '평범하다고 느끼는 곳은?', '마음속', '겉모습', '학교', '놀이터', '1', 'And I feel ordinary.', '마음속입니다.'],
         ['2', 'Why I Didn\'t Go to School', '1', '학교에 가지 않은 이유는?', '수술', '이사', '여행', '방학', '1', 'I had surgeries.', '수술 때문입니다.']
@@ -29,14 +33,18 @@ function plain(value) {
 
 async function buildContent() {
     const code = await readFile(new URL('../Code.gs', import.meta.url), 'utf8');
+    let sheetId = null;
+    const spreadsheet = {
+        getId: () => sheetId,
+        getSheetByName: name => sheets[name]
+            ? { getDataRange: () => ({ getDisplayValues: () => sheets[name] }) }
+            : null
+    };
     const context = vm.createContext({
         console,
         SpreadsheetApp: {
-            openById: () => ({
-                getSheetByName: name => sheets[name]
-                    ? { getDataRange: () => ({ getDisplayValues: () => sheets[name] }) }
-                    : null
-            })
+            getActiveSpreadsheet: () => spreadsheet,
+            openById: () => spreadsheet
         },
         Utilities: {
             DigestAlgorithm: { SHA_256: 'SHA_256' },
@@ -46,7 +54,8 @@ async function buildContent() {
         }
     });
     vm.runInContext(code, context);
-    return context.buildFirebaseContent();
+    sheetId = context.NOVEL_SHEET_ID;
+    return context.buildNovelContent({ id: 'wonder', title: 'Wonder', author: 'R. J. Palacio', cover: 'wonder.webp' });
 }
 
 test('Code.gs가 본문과 별도로 가벼운 챕터 목록을 올린다', async () => {
@@ -93,8 +102,9 @@ test('목록 순서와 본문 순서가 같아 위치 번호로 짝지어진다'
 test('앱은 챕터 목록을 먼저 받고 고른 챕터만 따로 받는다', async () => {
     const auth = await readFile(new URL('../js/auth.js', import.meta.url), 'utf8');
 
-    assert.match(auth, /\$\{FIREBASE_CONTENT_PATH\}\/\$\{kind\}\/index/);
-    assert.match(auth, /\$\{FIREBASE_CONTENT_PATH\}\/\$\{kind\}\/chapters\/\$\{position\}/);
+    // 경로 앞머리에 소설 id가 붙습니다.
+    assert.match(auth, /\$\{novelContentPath\(\)\}\/\$\{kind\}\/index/);
+    assert.match(auth, /\$\{novelContentPath\(\)\}\/\$\{kind\}\/chapters\/\$\{position\}/);
     // 목록 노드가 없는 예전 데이터에서도 앱이 멈추지 않아야 합니다.
     assert.match(auth, /function fetchAllChapters/);
     assert.match(auth, /챕터 목록 노드가 없어/);

@@ -27,7 +27,21 @@ import {
 // index.html의 modulepreload가 내려받기를 미리 시작해 두므로 기다림은 없습니다.
 const FIREBASE_DATABASE_MODULE = 'https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js';
 const FIREBASE_CONTENT_PATH = 'novel/content';
+// 소설 목록은 content 아래에 둡니다. 보안 규칙이 content를 이미 승인된 사용자에게만
+// 열어 두고 있어, 규칙을 건드리지 않고 목록을 읽을 수 있습니다.
+const FIREBASE_NOVELS_PATH = `${FIREBASE_CONTENT_PATH}/novels`;
 const LIBRARY_KINDS = ['quiz', 'word'];
+
+// 지금 보고 있는 소설. 소설을 고를 때마다 바뀌고, 모든 경로와 캐시 키에 들어갑니다.
+let activeNovelId = null;
+let availableNovels = [];
+let allowedNovelIdsPromise = null;
+const ALLOWED_NOVELS_CACHE_KEY = 'novel-app-allowed-novels';
+
+function novelContentPath() {
+    if (!activeNovelId) throw new Error('소설이 선택되지 않았습니다.');
+    return `${FIREBASE_CONTENT_PATH}/${activeNovelId}`;
+}
 
 let firebaseApp = null;
 let auth = null;
@@ -105,7 +119,14 @@ function showPendingStatus(user) {
 function revealApp(startReadingApp) {
     getElement('login-screen').classList.add('hidden');
     getElement('app-container').classList.remove('hidden');
-    startReadingApp({ loadChapterIndex, loadChapter, prepareLibraryCache });
+    startReadingApp({
+        loadChapterIndex,
+        loadChapter,
+        prepareLibraryCache,
+        listNovels,
+        selectNovel,
+        getAllowedNovelIds
+    });
 }
 
 function normalizeKind(kind) {
@@ -134,7 +155,7 @@ function watchContentManifest() {
         let settled = false;
 
         stopManifestWatch = onValue(
-            ref(database, `${FIREBASE_CONTENT_PATH}/manifest`),
+            ref(database, `${novelContentPath()}/manifest`),
             snapshot => {
                 applyContentManifest(snapshot.val());
                 if (settled) return;
@@ -209,25 +230,25 @@ async function resolveChapterIndex(kind) {
         throw new Error('Firebase 학습 자료 버전을 확인하지 못했습니다. 시트 동기화를 실행해 주세요.');
     }
 
-    const cached = await readChapterIndex(kind);
+    const cached = await readChapterIndex(activeNovelId, kind);
     if (cached?.version === version) {
         if (cached.complete) backgroundFilled.add(kind);
         return { kind, version, entries: cached.index };
     }
     // 버전이 달라졌으면 예전 본문 기록은 더 이상 쓸모가 없습니다.
-    if (cached) await clearLibraryCache(kind);
+    if (cached) await clearLibraryCache(activeNovelId, kind);
 
     const { entries, complete } = await fetchChapterIndex(kind, version);
     if (entries.length === 0) {
         throw new Error(`Firebase에 ${contentLabel(kind)} 자료가 없습니다.`);
     }
     if (complete) backgroundFilled.add(kind);
-    await saveChapterIndex(kind, { version, index: entries, complete });
+    await saveChapterIndex(activeNovelId, kind, { version, index: entries, complete });
     return { kind, version, entries };
 }
 
 async function fetchChapterIndex(kind, version) {
-    const snapshot = await get(ref(database, `${FIREBASE_CONTENT_PATH}/${kind}/index`));
+    const snapshot = await get(ref(database, `${novelContentPath()}/${kind}/index`));
     if (snapshot.exists()) {
         return { entries: withPositions(normalizeFirebaseIndex(snapshot.val())), complete: false };
     }
@@ -236,7 +257,7 @@ async function fetchChapterIndex(kind, version) {
     // 만들어 둡니다. Code.gs를 새로 배포하고 다시 동기화하면 이 경로는 쓰이지 않습니다.
     console.info('챕터 목록 노드가 없어 전체 자료로 목록을 만듭니다. 시트를 다시 동기화해 주세요.');
     const chapters = await fetchAllChapters(kind);
-    await saveCachedChapters(kind, version, chapters);
+    await saveCachedChapters(activeNovelId, kind, version, chapters);
     return { entries: withPositions(chapters.map(chapter => describeIndexEntry(kind, chapter))), complete: true };
 }
 
@@ -277,20 +298,20 @@ function loadChapter(kind, position) {
 async function resolveChapter(kind, position) {
     const { version } = await loadChapterIndex(kind);
 
-    const cached = await readCachedChapter(kind, position, version);
+    const cached = await readCachedChapter(activeNovelId, kind, position, version);
     if (cached) return cached;
 
-    const snapshot = await get(ref(database, `${FIREBASE_CONTENT_PATH}/${kind}/chapters/${position}`));
+    const snapshot = await get(ref(database, `${novelContentPath()}/${kind}/chapters/${position}`));
     if (!snapshot.exists()) {
         throw new Error('선택한 챕터 자료를 찾지 못했습니다. 시트를 다시 동기화해 주세요.');
     }
     const chapter = normalizeFirebaseChapter(kind, snapshot.val());
-    await saveCachedChapter(kind, position, { version, chapter });
+    await saveCachedChapter(activeNovelId, kind, position, { version, chapter });
     return chapter;
 }
 
 async function fetchAllChapters(kind) {
-    const snapshot = await get(ref(database, `${FIREBASE_CONTENT_PATH}/${kind}/chapters`));
+    const snapshot = await get(ref(database, `${novelContentPath()}/${kind}/chapters`));
     if (!snapshot.exists()) {
         throw new Error(`Firebase에 ${contentLabel(kind)} 자료가 없습니다.`);
     }
@@ -306,6 +327,8 @@ async function fetchAllChapters(kind) {
 // 113번 요청하는 것보다 훨씬 싸고, 다음 실행부터는 네트워크를 쓰지 않습니다.
 function prepareLibraryCache() {
     migrateLegacyLibraryCache();
+    // 소설을 고르기 전에는 받아 둘 자료가 없습니다.
+    if (!activeNovelId) return Promise.resolve([]);
 
     const indexes = Promise.all(LIBRARY_KINDS.map(kind =>
         loadChapterIndex(kind).catch(error => {
@@ -325,10 +348,10 @@ async function fillChaptersInBackground(kind) {
     try {
         const { version } = await loadChapterIndex(kind);
         const chapters = await fetchAllChapters(kind);
-        await saveCachedChapters(kind, version, chapters);
-        const cached = await readChapterIndex(kind);
+        await saveCachedChapters(activeNovelId, kind, version, chapters);
+        const cached = await readChapterIndex(activeNovelId, kind);
         if (cached?.version === version) {
-            await saveChapterIndex(kind, { version, index: cached.index, complete: true });
+            await saveChapterIndex(activeNovelId, kind, { version, index: cached.index, complete: true });
         }
     } catch (error) {
         backgroundFilled.delete(kind);
@@ -348,6 +371,7 @@ function whenIdle() {
 }
 
 function resetLibraryState() {
+    activeNovelId = null;
     unwatchContentManifest();
     contentManifest = null;
     manifestReady = null;
@@ -356,18 +380,102 @@ function resetLibraryState() {
     backgroundFilled.clear();
 }
 
-// 콘텐츠 읽기 권한은 firebase.rules.json의 accessByUid 규칙이 이미 막고 있습니다.
-// 그래서 구독이 성공했다는 것 자체가 승인된 사용자라는 뜻이고, 느린 Apps Script를
-// 거칠 이유가 없습니다.
+// 콘텐츠 읽기 권한은 firebase.rules.json의 규칙이 이미 막고 있습니다. 그래서 소설
+// 목록을 읽어 냈다는 것 자체가 승인된 사용자라는 뜻이고, 느린 Apps Script를 거칠
+// 이유가 없습니다. 버전 구독은 소설을 고른 뒤에 시작합니다.
 async function subscribeAsApprovedUser() {
     try {
         await ensureDatabase();
-        manifestReady = watchContentManifest();
-        await manifestReady;
+        // 규칙이 막고 있으므로 이 읽기가 통과했다는 것 자체가 승인의 증거입니다.
+        // 목록이 비어 있는 것은 권한 문제가 아니라 자료를 아직 동기화하지 않은
+        // 것이므로, 로그인은 통과시키고 소설 화면에서 사정을 알려 줍니다.
+        const snapshot = await get(ref(database, FIREBASE_NOVELS_PATH));
+        availableNovels = snapshot.exists() ? normalizeNovelList(snapshot.val()) : [];
+        if (availableNovels.length === 0) {
+            console.warn('소설 목록이 비어 있습니다. 시트에서 학습 자료 동기화를 실행해 주세요.');
+        }
         return true;
     } catch (error) {
+        console.warn('소설 목록을 읽지 못했습니다.', error);
         resetLibraryState();
         return false;
+    }
+}
+
+function normalizeNovelList(value) {
+    const entries = Array.isArray(value)
+        ? value
+        : Object.keys(value || {}).sort().map(key => value[key]);
+    return entries
+        .filter(novel => novel && typeof novel.id === 'string' && novel.id)
+        .map(novel => ({
+            id: novel.id,
+            title: String(novel.title || novel.id),
+            author: String(novel.author || ''),
+            cover: String(novel.cover || '')
+        }));
+}
+
+/** 학생이 고른 소설로 갈아탑니다. 이전 소설의 요청과 버전 구독은 모두 버립니다. */
+async function selectNovel(novelId) {
+    const novel = availableNovels.find(candidate => candidate.id === novelId);
+    if (!novel) throw new Error('선택한 소설을 찾을 수 없습니다.');
+
+    if (activeNovelId === novelId && manifestReady) {
+        await manifestReady;
+        return novel;
+    }
+
+    resetLibraryState();
+    activeNovelId = novelId;
+    manifestReady = watchContentManifest();
+    await manifestReady;
+    return novel;
+}
+
+function listNovels() {
+    return availableNovels;
+}
+
+/**
+ * 이 학생이 볼 수 있는 소설 id 목록입니다. Apps Script가 AllowedUsers의 소설별
+ * 열을 읽어 돌려줍니다. 로그인 한 번에 한 번만 물어보고 세션에 적어 둡니다.
+ */
+function getAllowedNovelIds() {
+    if (allowedNovelIdsPromise) return allowedNovelIdsPromise;
+
+    allowedNovelIdsPromise = (async () => {
+        const cached = readAllowedNovelsCache();
+        if (cached) return cached;
+
+        const response = await callScript('session');
+        // 배열이 아니면 '아직 권한 정보가 없다'는 뜻입니다. 빈 배열과 다릅니다.
+        const ids = Array.isArray(response?.user?.novels) ? response.user.novels : null;
+        if (ids) writeAllowedNovelsCache(ids);
+        return ids;
+    })();
+
+    allowedNovelIdsPromise.catch(() => {
+        allowedNovelIdsPromise = null;
+    });
+    return allowedNovelIdsPromise;
+}
+
+function readAllowedNovelsCache() {
+    try {
+        const raw = globalThis.sessionStorage?.getItem(ALLOWED_NOVELS_CACHE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        return Array.isArray(parsed) ? parsed : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function writeAllowedNovelsCache(ids) {
+    try {
+        globalThis.sessionStorage?.setItem(ALLOWED_NOVELS_CACHE_KEY, JSON.stringify(ids));
+    } catch (error) {
+        // 저장에 실패해도 목록은 이미 손에 있으므로 그냥 넘어갑니다.
     }
 }
 

@@ -13,12 +13,19 @@ function normalizeKind(kind) {
     return kind === 'word' ? 'word' : 'quiz';
 }
 
-export function indexCacheKey(kind) {
-    return `index:${normalizeKind(kind)}`;
+// 소설마다 자료가 따로 있으므로 키에 소설 id를 넣습니다. 넣지 않으면 두 번째
+// 소설을 열었을 때 첫 소설의 기록을 덮어써 엉뚱한 챕터를 보여 주게 됩니다.
+function normalizeNovel(novelId) {
+    const id = String(novelId || '').trim();
+    return id || 'unknown';
 }
 
-export function chapterCacheKey(kind, position) {
-    return `chapter:${normalizeKind(kind)}:${position}`;
+export function indexCacheKey(novelId, kind) {
+    return `index:${normalizeNovel(novelId)}:${normalizeKind(kind)}`;
+}
+
+export function chapterCacheKey(novelId, kind, position) {
+    return `chapter:${normalizeNovel(novelId)}:${normalizeKind(kind)}:${position}`;
 }
 
 function openDatabase() {
@@ -88,10 +95,10 @@ async function safely(operation, fallback, message) {
     }
 }
 
-export function readChapterIndex(kind) {
+export function readChapterIndex(novelId, kind) {
     return safely(
         async () => {
-            const entry = await runTransaction('readonly', store => readRequest(store, indexCacheKey(kind)));
+            const entry = await runTransaction('readonly', store => readRequest(store, indexCacheKey(novelId, kind)));
             if (typeof entry?.version !== 'string' || !Array.isArray(entry.index)) return null;
             return entry;
         },
@@ -100,12 +107,12 @@ export function readChapterIndex(kind) {
     );
 }
 
-export function saveChapterIndex(kind, { version, index }) {
+export function saveChapterIndex(novelId, kind, { version, index }) {
     if (typeof version !== 'string' || !Array.isArray(index)) return Promise.resolve(false);
 
     return safely(
         async () => {
-            await runTransaction('readwrite', store => store.put({ version, index }, indexCacheKey(kind)));
+            await runTransaction('readwrite', store => store.put({ version, index }, indexCacheKey(novelId, kind)));
             return true;
         },
         false,
@@ -113,10 +120,10 @@ export function saveChapterIndex(kind, { version, index }) {
     );
 }
 
-export function readCachedChapter(kind, position, version) {
+export function readCachedChapter(novelId, kind, position, version) {
     return safely(
         async () => {
-            const entry = await runTransaction('readonly', store => readRequest(store, chapterCacheKey(kind, position)));
+            const entry = await runTransaction('readonly', store => readRequest(store, chapterCacheKey(novelId, kind, position)));
             if (!entry?.chapter || entry.version !== version) return null;
             return entry.chapter;
         },
@@ -125,12 +132,12 @@ export function readCachedChapter(kind, position, version) {
     );
 }
 
-export function saveCachedChapter(kind, position, { version, chapter }) {
+export function saveCachedChapter(novelId, kind, position, { version, chapter }) {
     if (typeof version !== 'string' || !chapter) return Promise.resolve(false);
 
     return safely(
         async () => {
-            await runTransaction('readwrite', store => store.put({ version, chapter }, chapterCacheKey(kind, position)));
+            await runTransaction('readwrite', store => store.put({ version, chapter }, chapterCacheKey(novelId, kind, position)));
             return true;
         },
         false,
@@ -138,7 +145,7 @@ export function saveCachedChapter(kind, position, { version, chapter }) {
     );
 }
 
-export function saveCachedChapters(kind, version, chapters) {
+export function saveCachedChapters(novelId, kind, version, chapters) {
     if (typeof version !== 'string' || !Array.isArray(chapters)) return Promise.resolve(false);
 
     // 한 트랜잭션에 몰아 담아야 챕터 수만큼 쓰기가 갈라지지 않습니다.
@@ -146,7 +153,7 @@ export function saveCachedChapters(kind, version, chapters) {
         async () => {
             await runTransaction('readwrite', store => {
                 chapters.forEach((chapter, position) => {
-                    store.put({ version, chapter }, chapterCacheKey(kind, position));
+                    store.put({ version, chapter }, chapterCacheKey(novelId, kind, position));
                 });
             });
             return true;
@@ -157,10 +164,9 @@ export function saveCachedChapters(kind, version, chapters) {
 }
 
 // 버전이 바뀌면 그 종류의 기록만 전부 지웁니다.
-export function clearLibraryCache(kind) {
-    const normalizedKind = normalizeKind(kind);
-    const indexKey = indexCacheKey(normalizedKind);
-    const chapterPrefix = `chapter:${normalizedKind}:`;
+export function clearLibraryCache(novelId, kind) {
+    const indexKey = indexCacheKey(novelId, kind);
+    const chapterPrefix = `chapter:${normalizeNovel(novelId)}:${normalizeKind(kind)}:`;
 
     return safely(
         async () => {

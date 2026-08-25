@@ -14,7 +14,7 @@ import {
 
 // 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
 // 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
-const APP_VERSION = '2026-08-24-cleanup2';
+const APP_VERSION = '2026-08-25-multi-novel-7';
 const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
 // 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
@@ -77,11 +77,14 @@ let allWordChapters = [];       // 단어장(Word) 챕터 목록
 let currentWordChapterIndex = 0;
 let loadAuthorizedIndex = null;
 let loadAuthorizedChapter = null;
+let novelApi = null;          // auth.js가 넘겨준 소설 목록·선택 함수
+let selectableNovels = [];    // 이 학생이 볼 수 있는 소설만 추린 목록
+let activeNovel = null;
 let chapterOpening = false;     // 챕터를 받는 동안 중복 선택을 막습니다.
 let appStarted = false;
 
 // --- [1단계] 화면 전환 로직 ---
-const SCREEN_IDS = ['start-screen', 'chapter-screen', 'quiz-screen', 'result-screen',
+const SCREEN_IDS = ['novel-screen', 'start-screen', 'chapter-screen', 'quiz-screen', 'result-screen',
                     'word-chapter-screen', 'word-screen'];
 const HISTORY_MARKER = 'wonder-app';
 
@@ -124,7 +127,14 @@ async function restoreHistoryScreen(state) {
     closeContinueModal();
 
     if (!state || state.app !== HISTORY_MARKER || !SCREEN_IDS.includes(state.screenId)) {
-        showScreen('start-screen', { historyMode: 'none' });
+        await openNovelPicker({ historyMode: 'none' });
+        return;
+    }
+
+    // 소설을 고르기 전에는 되돌릴 화면이 없습니다. 볼 수 있는 소설이 하나뿐이면
+    // openNovelPicker가 알아서 그 소설을 열고 시작 화면을 띄웁니다.
+    if (state.screenId === 'novel-screen' || !activeNovel) {
+        await openNovelPicker({ historyMode: 'none' });
         return;
     }
 
@@ -201,6 +211,120 @@ async function requestChapterIndex(mode) {
 function requestChapter(mode, entry) {
     if (!loadAuthorizedChapter) return Promise.reject(new Error('로그인 정보가 준비되지 않았습니다.'));
     return loadAuthorizedChapter(mode, entry.position);
+}
+
+// --- 소설 선택 ---
+// 볼 수 있는 소설이 하나뿐이면 고르는 화면을 건너뜁니다.
+async function openNovelPicker({ historyMode = 'replace' } = {}) {
+    const status = document.getElementById('novel-status');
+    status.innerText = '';
+
+    const novels = novelApi?.listNovels?.() || [];
+    let allowed = null;
+    try {
+        allowed = await novelApi?.getAllowedNovelIds?.();
+    } catch (error) {
+        // 권한 목록을 못 받으면 목록을 가리지 않습니다. 자료 자체는 어차피
+        // Firebase 규칙이 지키고, 여기서 막으면 아무것도 못 보게 됩니다.
+        console.warn('소설 접근 권한을 확인하지 못했습니다.', error);
+    }
+
+    // 배열이면 그대로 따릅니다. 빈 배열이면 볼 수 있는 소설이 없다는 뜻이므로
+    // 목록도 비웁니다. null은 권한 정보를 아직 못 받은 경우라 가리지 않습니다.
+    selectableNovels = Array.isArray(allowed)
+        ? novels.filter(novel => allowed.includes(novel.id))
+        : novels;
+
+    if (selectableNovels.length === 0) {
+        renderNovelList();
+        // 소설 자체가 없는 것과, 있지만 이 학생에게 허용되지 않은 것은 다른 상황입니다.
+        status.innerText = novels.length === 0
+            ? '학습 자료가 아직 동기화되지 않았습니다. 선생님께 문의해 주세요.'
+            : '읽을 수 있는 소설이 없습니다. 선생님께 문의해 주세요.';
+        showScreen('novel-screen', { historyMode });
+        return;
+    }
+
+    if (selectableNovels.length === 1) {
+        await chooseNovel(selectableNovels[0], { historyMode });
+        return;
+    }
+
+    renderNovelList();
+    showScreen('novel-screen', { historyMode });
+}
+
+function renderNovelList() {
+    const list = document.getElementById('novel-list');
+    list.innerHTML = '';
+
+    selectableNovels.forEach(novel => {
+        const button = document.createElement('button');
+        button.className = 'group flex w-full items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-blue-300 hover:bg-blue-100 hover:shadow-lg';
+        button.innerHTML = `
+            <img src="assets/${escapeHtml(novel.cover || '')}" alt="" draggable="false" class="h-16 w-16 shrink-0 rounded-xl object-cover shadow-md">
+            <span class="min-w-0 text-left">
+                <span class="block text-lg font-bold">${escapeHtml(novel.title)}</span>
+                ${novel.author ? `<span class="block text-sm text-slate-500">${escapeHtml(novel.author)}</span>` : ''}
+            </span>
+        `;
+        // 표지 파일을 아직 안 올렸어도 목록은 그대로 쓸 수 있어야 합니다.
+        const cover = button.querySelector('img');
+        cover.addEventListener('error', () => cover.classList.add('hidden'));
+        button.addEventListener('click', () => chooseNovel(novel));
+        list.appendChild(button);
+    });
+}
+
+async function chooseNovel(novel, { historyMode = 'push' } = {}) {
+    const status = document.getElementById('novel-status');
+    status.innerText = '자료를 준비하는 중입니다...';
+
+    try {
+        await novelApi.selectNovel(novel.id);
+    } catch (error) {
+        console.error('소설을 열지 못했습니다.', error);
+        status.innerText = '이 소설의 자료를 불러오지 못했습니다. 시트 동기화를 확인해 주세요.';
+        return;
+    }
+
+    activeNovel = novel;
+    allChapters = [];
+    allWordChapters = [];
+    applyNovelToStartScreen(novel);
+    status.innerText = '';
+    document.getElementById('start-status').innerText = '';
+    showScreen('start-screen', { historyMode });
+    novelApi.prepareLibraryCache?.().catch(error => console.warn('자료 미리 받기 오류:', error));
+}
+
+// 시작 화면 제목은 한 줄로 둡니다. 'When You Trap a Tiger'처럼 긴 제목은 기본
+// 크기로는 넘치므로, 길이에 맞춰 한 단계씩 줄입니다.
+const TITLE_SIZES = [
+    { maxLength: 10, className: 'text-4xl sm:text-5xl' },
+    { maxLength: 18, className: 'text-3xl' },
+    { maxLength: 28, className: 'text-2xl' },
+    { maxLength: Infinity, className: 'text-xl' }
+];
+
+function titleSizeClasses(title) {
+    return TITLE_SIZES.find(size => title.length <= size.maxLength).className;
+}
+
+function applyNovelToStartScreen(novel) {
+    const heading = document.getElementById('start-title');
+    heading.innerText = novel.title;
+    heading.className = `font-black tracking-tight text-slate-900 ${titleSizeClasses(novel.title)}`;
+
+    const cover = document.getElementById('start-cover');
+    cover.classList.remove('hidden');
+    cover.src = `assets/${novel.cover || ''}`;
+    cover.alt = novel.title;
+
+    // 소설이 하나뿐이면 되돌아갈 곳이 없으니 버튼을 숨겨 둡니다.
+    const backButton = document.getElementById('novel-back-btn');
+    backButton.classList.toggle('hidden', selectableNovels.length <= 1);
+    backButton.classList.toggle('flex', selectableNovels.length > 1);
 }
 
 // --- 'Quiz' / 'Word' 버튼 ---
@@ -560,7 +684,10 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
             chapterSeparator: 'border-blue-100 group-hover:border-blue-200'
         };
 
-    groupChaptersByCategory(chapters).forEach(group => {
+    const groups = groupChaptersByCategory(chapters);
+    const expandByDefault = groups.length === 1;
+
+    groups.forEach(group => {
         const section = document.createElement('section');
         section.className = 'space-y-2';
 
@@ -573,7 +700,7 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
             <span class="flex min-w-0 items-center gap-3">
                 <span class="inline-flex w-[6.75rem] shrink-0 justify-center rounded-lg px-1 py-1.5 text-[10px] font-extrabold tracking-[0.12em] ${styles.partBadge}">${escapeHtml(category.part.toUpperCase())}</span>
                 <span class="min-w-0 border-l pl-3 ${styles.separator}">
-                    <span class="block text-[10px] font-bold uppercase tracking-[0.16em] ${styles.role}">Narrator</span>
+                    ${category.role ? `<span class="block text-[10px] font-bold uppercase tracking-[0.16em] ${styles.role}">${escapeHtml(category.role)}</span>` : ''}
                     <span class="block truncate text-base font-extrabold ${styles.heading}">${escapeHtml(category.title)}</span>
                 </span>
             </span>
@@ -584,8 +711,12 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
         `;
 
         const chapterPanel = document.createElement('div');
-        chapterPanel.className = 'hidden space-y-2 pl-2';
+        chapterPanel.className = expandByDefault ? 'space-y-2 pl-2' : 'hidden space-y-2 pl-2';
         const chevron = groupButton.querySelector('svg');
+        if (expandByDefault) {
+            groupButton.setAttribute('aria-expanded', 'true');
+            chevron.classList.add('rotate-180');
+        }
         groupButton.addEventListener('click', () => {
             const opening = chapterPanel.classList.contains('hidden');
             chapterPanel.classList.toggle('hidden', !opening);
@@ -594,7 +725,7 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
         });
 
         group.entries.forEach(({ chapter, index, info }) => {
-            const chapterInfo = info || describeChapter(chapter.title, index);
+            const chapterInfo = info || describeChapter(chapter, index);
             const chapterButton = document.createElement('button');
             chapterButton.className = `w-full text-left bg-white border-2 ${styles.chapter} px-3 py-2.5 rounded-xl transition duration-200 flex justify-between items-center gap-3 group`;
             chapterButton.innerHTML = `
@@ -615,9 +746,11 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
 
 function splitCategoryLabel(category) {
     const match = String(category).match(/^(Part\s+\w+)\s*:\s*(.+)$/i);
+    // Wonder는 파트마다 화자가 바뀌어 'Part One: August' 꼴입니다. 파트가 없는
+    // 소설은 그런 형식이 아니므로 화자 줄을 아예 두지 않습니다.
     return match
-        ? { part: match[1], title: match[2] }
-        : { part: 'Part', title: String(category) };
+        ? { part: match[1], title: match[2], role: 'Narrator' }
+        : { part: 'Chapters', title: String(category), role: '' };
 }
 
 // --- [6단계] 퀴즈 실행 로직 ---
@@ -763,19 +896,26 @@ function continueToNextChapter() {
 }
 
 // --- 시작 화면을 보여 주는 동안 퀴즈/어휘 자료를 미리 받아 둡니다 ---
-export function startReadingApp({ loadChapterIndex, loadChapter, prepareLibraryCache }) {
+export function startReadingApp(api) {
+    const { loadChapterIndex, loadChapter } = api;
+    novelApi = api;
+
     if (appStarted) {
         closeContinueModal();
         document.getElementById('start-status').innerText = '';
-        showScreen('start-screen', { historyMode: 'replace' });
-        prepareLibraryCache?.().catch(error => console.warn('자료 미리 받기 오류:', error));
+        openNovelPicker({ historyMode: 'replace' })
+            .catch(error => console.warn('소설 목록을 열지 못했습니다.', error));
         return;
     }
     appStarted = true;
     loadAuthorizedIndex = loadChapterIndex;
     loadAuthorizedChapter = loadChapter;
-    window.history.replaceState(createHistoryState('start-screen'), '', window.location.href);
+    window.history.replaceState(createHistoryState('novel-screen'), '', window.location.href);
     window.addEventListener('popstate', event => restoreHistoryScreen(event.state));
+    document.getElementById('novel-back-btn').addEventListener('click', () => {
+        openNovelPicker({ historyMode: 'push' })
+            .catch(error => console.warn('소설 목록을 열지 못했습니다.', error));
+    });
     document.getElementById('start-btn').addEventListener('click', startQuiz);
     document.getElementById('word-btn').addEventListener('click', startWords);
     document.getElementById('quiz-back-btn').addEventListener('click', goToChapters);
@@ -796,9 +936,10 @@ export function startReadingApp({ loadChapterIndex, loadChapter, prepareLibraryC
     document.addEventListener('selectstart', event => event.preventDefault());
     document.addEventListener('contextmenu', event => event.preventDefault());
     document.addEventListener('keydown', handleWordChapterArrowKeys);
-    // 시작 화면이 떠 있는 동안 챕터까지 실제로 받아 둡니다. 캐시가 최신이면 아무것도
-    // 내려받지 않고, 낡았을 때만 채워 넣으므로 버튼을 눌렀을 때 기다림이 없습니다.
-    prepareLibraryCache?.().catch(error => console.warn('자료 미리 받기 오류:', error));
+    // 소설을 고르면 그때부터 그 소설의 챕터를 미리 받아 둡니다. 캐시가 최신이면
+    // 아무것도 내려받지 않으므로 버튼을 눌렀을 때 기다림이 없습니다.
+    openNovelPicker({ historyMode: 'replace' })
+        .catch(error => console.warn('소설 목록을 열지 못했습니다.', error));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
