@@ -68,6 +68,115 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* 가로가 긴 화면(모니터, 태블릿 가로)에서는 좌우 여백이 지나치게 넓습니다.
+           목차와 어휘 내용만 카드를 넓히고 여러 열로 나눕니다. 퀴즈를 푸는 화면은
+           문제 지문이 한 줄로 길어지지 않도록 지금처럼 한 열로 둡니다.
+           Tailwind가 만든 클래스가 아니라 id로 거는 규칙이라 CSS를 다시 빌드하지
+           않아도 됩니다. */
+        @media (min-width: 1024px) {
+            #app-container[data-screen="chapter-screen"],
+            #app-container[data-screen="word-chapter-screen"],
+            #app-container[data-screen="word-screen"] {
+                max-width: 72rem;
+            }
+
+            /* 파트 헤더는 가로 전체를 쓰고 그 안의 챕터 버튼만 두 열로 나눕니다.
+               접어 둔 파트(.hidden)까지 grid로 만들면 다시 펼쳐지므로 제외합니다. */
+            #chapter-list [data-chapter-panel]:not(.hidden),
+            #word-chapter-list [data-chapter-panel]:not(.hidden) {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.5rem;
+            }
+
+            #word-list {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.75rem;
+            }
+
+            /* 같은 줄에 놓인 카드는 그중 가장 긴 것에 높이를 맞춰 아래 선을 맞춥니다.
+               글자는 늘어나지 않고 위에서부터 붙은 채 아래 여백만 생깁니다. */
+            #chapter-list [data-chapter-panel]:not(.hidden),
+            #word-chapter-list [data-chapter-panel]:not(.hidden),
+            #word-list {
+                align-items: stretch;
+            }
+
+            /* 배경지식은 어휘가 끝난 다음 줄에서 시작합니다. 어휘가 홀수 개여서
+               오른쪽 칸이 비더라도 그 자리에 끼워 넣지 않습니다. Code.gs가 어휘를
+               모두 담은 뒤 배경지식을 잇대므로 첫 장만 첫 칸으로 밀면 됩니다. */
+            #word-list [data-background-start] {
+                grid-column-start: 1;
+            }
+
+            /* 퀴즈는 문제만 있을 때는 한 열이다가, 답을 고르면 그 오른쪽에
+               해설이 붙으면서 두 열이 됩니다. 문제 자체를 좌우로 둘씩 보이게
+               하지는 않습니다. 답을 고르기 전에는 카드 폭도 지금 그대로 둘니다. */
+            #app-container[data-screen="quiz-screen"][data-quiz-answered="true"] {
+                max-width: 72rem;
+            }
+
+            #app-container[data-quiz-answered="true"] #quiz-screen:not(.hidden) {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                align-content: start;
+                column-gap: 1.5rem;
+            }
+
+            /* 머리글은 두 열에 걸치고, 문제는 왼쪽 윗칸에, 보기와 해설은 그 아래
+               같은 줄에 나란히 놓입니다. 이러면 해설이 첫 보기와 같은 높이에서 시작합니다. */
+            #app-container[data-quiz-answered="true"] #quiz-screen:not(.hidden) > #quiz-header {
+                grid-column: 1 / -1;
+                grid-row: 1;
+            }
+
+            #app-container[data-quiz-answered="true"] #quiz-screen:not(.hidden) > #quiz-question {
+                grid-column: 1;
+                grid-row: 2;
+            }
+
+            #app-container[data-quiz-answered="true"] #quiz-screen:not(.hidden) > #options-container {
+                grid-column: 1;
+                grid-row: 3;
+            }
+
+            #app-container[data-quiz-answered="true"] #quiz-screen:not(.hidden) > #quiz-answer-pane {
+                grid-column: 2;
+                grid-row: 3;
+            }
+
+            /* 한 열일 때 보기와 해설 사이를 띄우던 간격입니다. 두 열에서는
+               해설이 문제와 같은 높이에서 시작해야 하므로 지웁니다. */
+            #app-container[data-quiz-answered="true"] #quiz-screen:not(.hidden) #explanation-box {
+                margin-top: 0;
+            }
+
+            /* space-y-*는 첫 항목을 뺀 전부에 margin-top을 답니다. 여러 열에서는
+               첫 줄 왼쪽 칸만 위로 밀리므로 지우고 gap으로 대신합니다. */
+            #chapter-list [data-chapter-panel] > * + *,
+            #word-chapter-list [data-chapter-panel] > * + *,
+            #word-list > * + * {
+                margin-top: 0;
+            }
+        }
+
+        /* 더 넓은 화면에서는 한 칸 폭을 그대로 둔 채 열만 하나 더 늘립니다.
+           카드 폭이 함께 커지지 않으면 세 열이 지나치게 좁아집니다. */
+        @media (min-width: 1536px) {
+            #app-container[data-screen="chapter-screen"],
+            #app-container[data-screen="word-chapter-screen"],
+            #app-container[data-screen="word-screen"] {
+                max-width: 100rem;
+            }
+
+            #chapter-list [data-chapter-panel]:not(.hidden),
+            #word-chapter-list [data-chapter-panel]:not(.hidden),
+            #word-list {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
     </style>
 </head>
     <body class="bg-blue-50 min-h-screen flex items-start justify-center p-0">
@@ -204,7 +313,7 @@
         </div>
 
         <div id="quiz-screen" class="hidden flex flex-1 min-h-0 flex-col overflow-y-auto pr-2">
-            <div class="flex justify-between items-center gap-3 mb-6 border-b pb-4">
+            <div id="quiz-header" class="flex justify-between items-center gap-3 mb-6 border-b pb-4">
                 <div class="flex items-center gap-3 min-w-0">
                     <button data-action="go-start" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-slate-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
@@ -223,21 +332,25 @@
                 <span id="progress-text" class="shrink-0 text-gray-500 font-medium">1 / 5</span>
             </div>
 
-            <div class="flex gap-2 text-lg font-bold text-gray-800 mb-6 leading-relaxed">
+            <!-- 넓은 화면에서 답을 고르면 왼쪽은 문제와 보기, 오른쪽은 해설이 됩니다.
+                 해설은 첫 보기와 같은 높이에서 시작합니다. 규칙은 위 <style>에 있습니다. -->
+            <div id="quiz-question" class="flex gap-2 text-lg font-bold text-gray-800 mb-6 leading-relaxed">
                 <span class="shrink-0">❓</span>
                 <span id="question-text">질문이 여기에 표시됩니다.</span>
             </div>
 
             <div id="options-container" class="space-y-3"></div>
 
-            <div id="explanation-box" class="mt-6 p-4 rounded-lg hidden">
-                <p id="explanation-text" class="text-gray-700 font-medium"></p>
-            </div>
+            <div id="quiz-answer-pane">
+                <div id="explanation-box" class="mt-6 p-4 rounded-lg hidden">
+                    <p id="explanation-text" class="text-gray-700 font-medium"></p>
+                </div>
 
-            <div class="mt-8 text-right">
-                <button id="next-btn" class="hidden bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200">
-                    다음 문제 ➔
-                </button>
+                <div class="mt-8 text-right">
+                    <button id="next-btn" class="hidden bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200">
+                        다음 문제 ➔
+                    </button>
+                </div>
             </div>
         </div>
 

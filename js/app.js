@@ -14,7 +14,7 @@ import {
 
 // 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
 // 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
-const APP_VERSION = '2026-08-25-multi-novel-9';
+const APP_VERSION = '2026-08-26-wide-layout-4';
 const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
 // 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
@@ -111,6 +111,9 @@ function saveScreenToHistory(screenId, historyMode) {
 
 function showScreen(screenId, { historyMode = 'push', animate = true } = {}) {
     SCREEN_IDS.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+    // 넓은 화면에서 카드 폭을 화면마다 달리 하려면 지금 어느 화면인지 CSS가 알아야 합니다.
+    document.getElementById('app-container').dataset.screen = screenId;
 
     const screen = document.getElementById(screenId);
     screen.classList.remove('hidden');
@@ -584,6 +587,7 @@ async function startWordChapter(index, { historyMode = 'push', animate = true } 
     listContainer.scrollTop = 0;
 
     let wordNumber = 0;
+    let backgroundStarted = false;
     // 카드를 하나씩 붙이면 그때마다 화면 계산이 다시 돌아갑니다. 한 번에 붙입니다.
     const fragment = document.createDocumentFragment();
 
@@ -608,6 +612,12 @@ async function startWordChapter(index, { historyMode = 'push', animate = true } 
                 </div>` : ''}
             `;
         } else {
+            // 넓은 화면에서 배경지식은 어휘 다음 줄부터 시작합니다. Code.gs가 어휘를 모두
+            // 담은 뒤 배경지식을 잇대므로 첫 장에만 표시를 답니다. 규칙은 index.html에 있습니다.
+            if (!backgroundStarted) {
+                backgroundStarted = true;
+                card.setAttribute('data-background-start', '');
+            }
             card.className = "border-2 border-amber-200 rounded-xl p-4 bg-amber-50";
             card.innerHTML = `
                 <div class="font-bold text-gray-800"${ttsTextAttribute(sentenceTextForSpeech(item.title))}>${renderMarkedText(item.title)}</div>
@@ -719,6 +729,9 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
 
         const chapterPanel = document.createElement('div');
         chapterPanel.className = expandByDefault ? 'space-y-2 pl-2' : 'hidden space-y-2 pl-2';
+        // 넓은 화면에서 파트 헤더는 그대로 두고 챕터 버튼만 두 열로 나누기 위한 표시입니다.
+        // 규칙은 index.html의 미디어 쿼리에 있습니다.
+        chapterPanel.setAttribute('data-chapter-panel', '');
         const chevron = groupButton.querySelector('svg');
         if (expandByDefault) {
             groupButton.setAttribute('aria-expanded', 'true');
@@ -797,6 +810,9 @@ function loadQuestion({ syncHistory = true } = {}) {
         optionsContainer.appendChild(btn);
     });
 
+    // 답을 고르기 전에는 넓은 화면에서도 한 열입니다. 규칙은 index.html에 있습니다.
+    document.getElementById('app-container').dataset.quizAnswered = 'false';
+
     const expBox = document.getElementById('explanation-box');
     expBox.classList.add('hidden');
     expBox.classList.remove('bg-green-50', 'bg-red-50', 'bg-amber-50', 'border',
@@ -847,6 +863,9 @@ function selectOption(selectedIndex, buttonElement) {
     }
 
     expBox.classList.remove('hidden');
+    // 넓은 화면에서는 이 순간부터 해설이 문제 오른쪽으로 붙습니다.
+    document.getElementById('app-container').dataset.quizAnswered = 'true';
+
     const nextBtn = document.getElementById('next-btn');
     nextBtn.classList.remove('hidden');
     nextBtn.innerText = currentQuestionIndex === chapter.questions.length - 1

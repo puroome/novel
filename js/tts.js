@@ -142,9 +142,23 @@ export function selectEnglishVoice(voices = []) {
     return selected || englishVoices[0];
 }
 
+// 아이폰과 아이패드의 Web Speech 음성은 품질이 너무 낮아 읽어 주지 않는 편이
+// 낫다고 판단했습니다. 맥은 Alex·Samantha처럼 쓸 만한 음성이 있으므로 막지 않습니다.
+// iPadOS 13+는 데스크톱 Safari인 척하므로 터치 지점 수로 맥과 구분합니다. 맥은 0입니다.
+// iOS의 크롬·엣지도 속은 WebKit이라 사용자 문자열에 iPhone/iPad가 들어가 함께 걸립니다.
+export function isIosDevice(navigatorLike = globalThis.navigator) {
+    if (!navigatorLike) return false;
+    if (/iPad|iPhone|iPod/.test(String(navigatorLike.userAgent || ''))) return true;
+    return String(navigatorLike.platform || '') === 'MacIntel'
+        && Number(navigatorLike.maxTouchPoints || 0) > 1;
+}
+
 // voca-main의 Web Speech 기반 발음 로직을 앱 상태 의존성 없이 옮긴 버전입니다.
 // 연속해서 누르면 앞 발음을 취소하고 가장 최근에 누른 항목만 읽습니다.
-export function speakEnglish(value) {
+export function speakEnglish(value, { navigatorLike = globalThis.navigator } = {}) {
+    // 화면에 발음 버튼 같은 표시가 없으므로, 막아도 눌러서 아무 일이 없을 뿐입니다.
+    if (isIosDevice(navigatorLike)) return false;
+
     const text = prepareSpeechText(value);
     if (!text) return false;
 
