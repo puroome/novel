@@ -532,13 +532,17 @@ export function initializeNovelAuth({ startReadingApp }) {
         }
     });
 
-    getElement('logout-btn').addEventListener('click', async () => {
-        try {
-            await signOut(auth);
-        } catch (error) {
-            console.error('로그아웃 오류:', error);
-            setLoginError('로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.');
-        }
+    // 로그아웃 버튼은 소설 선택 화면과 시작 화면 양쪽에 있습니다. 볼 수 있는 소설이
+    // 하나뿐이면 선택 화면을 건너뛰므로, 시작 화면에도 두어야 빠져나갈 길이 생깁니다.
+    document.querySelectorAll('[data-action="logout"]').forEach(button => {
+        button.addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                console.error('로그아웃 오류:', error);
+                setLoginError('로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+            }
+        });
     });
 
     getElement('profile-form').addEventListener('submit', async event => {

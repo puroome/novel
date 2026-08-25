@@ -14,7 +14,7 @@ import {
 
 // 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
 // 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
-const APP_VERSION = '2026-08-25-multi-novel-7';
+const APP_VERSION = '2026-08-25-multi-novel-9';
 const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
 // 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
@@ -321,10 +321,17 @@ function applyNovelToStartScreen(novel) {
     cover.src = `assets/${novel.cover || ''}`;
     cover.alt = novel.title;
 
-    // 소설이 하나뿐이면 되돌아갈 곳이 없으니 버튼을 숨겨 둡니다.
+    // 오른쪽 위 버튼은 상황에 따라 하나만 둡니다. 소설이 여럿이면 선택 화면으로
+    // 돌아가는 버튼을, 하나뿐이면 돌아갈 곳이 없으므로 로그아웃 버튼을 보여 줍니다.
+    // (로그아웃은 원래 소설 선택 화면에 있습니다.)
+    const hasPicker = selectableNovels.length > 1;
     const backButton = document.getElementById('novel-back-btn');
-    backButton.classList.toggle('hidden', selectableNovels.length <= 1);
-    backButton.classList.toggle('flex', selectableNovels.length > 1);
+    backButton.classList.toggle('hidden', !hasPicker);
+    backButton.classList.toggle('flex', hasPicker);
+
+    const logoutButton = document.getElementById('logout-btn');
+    logoutButton.classList.toggle('hidden', hasPicker);
+    logoutButton.classList.toggle('flex', !hasPicker);
 }
 
 // --- 'Quiz' / 'Word' 버튼 ---
