@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wonder 독서 퀴즈</title>
+    <title>독서 퀴즈</title>
     <meta name="theme-color" content="#1e293b">
     <link rel="icon" href="icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -73,10 +73,15 @@
     <body class="bg-blue-50 min-h-screen flex items-start justify-center p-0">
 
     <section id="login-screen" class="box-border flex min-h-[100dvh] w-full max-w-2xl items-center justify-center bg-white p-6 text-center sm:my-0 sm:min-h-[100dvh] sm:rounded-2xl sm:shadow-xl">
-        <div class="w-full max-w-sm">
-            <img src="assets/wonder.webp" alt="Wonder" draggable="false" class="mx-auto h-28 w-24 rounded-[1.5rem] object-cover shadow-xl ring-4 ring-white">
-            <p class="mt-7 text-xs font-bold uppercase tracking-[0.28em] text-blue-500">Private reading journey</p>
-            <h1 class="mt-2 text-4xl font-black tracking-tight text-slate-900">WONDER</h1>
+        <div class="w-full max-w-md">
+            <!-- novel.webp는 1920x1200 가로형입니다. 같은 16:10으로 두면 잘리는 곳 없이
+                 원본 그대로 크게 보입니다. 뒤의 흐린 판은 사진을 띄워 보이게 합니다. -->
+            <div class="relative">
+                <div class="absolute -inset-4 rounded-[2.5rem] bg-gradient-to-br from-sky-300 via-blue-200 to-indigo-300 opacity-60 blur-2xl"></div>
+                <img src="assets/novel.webp" alt="" draggable="false" class="relative aspect-[16/10] w-full rounded-[1.75rem] object-cover shadow-2xl ring-4 ring-white">
+            </div>
+            <p class="mt-8 text-xs font-bold uppercase tracking-[0.28em] text-blue-500">Private reading journey</p>
+            <h1 class="mt-2 text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">NOVELS</h1>
 
             <div id="login-intro" class="mt-8">
                 <p class="text-sm leading-relaxed text-slate-500">허용된 Google 계정으로 로그인하면<br>어휘와 퀴즈를 이용할 수 있어요.</p>
@@ -117,6 +122,14 @@
     <div class="box-border hidden h-[100dvh] w-full max-w-2xl flex-col bg-white p-4 sm:rounded-2xl sm:p-6 sm:shadow-xl fade-in" id="app-container">
 
         <div id="novel-screen" class="relative hidden flex flex-1 flex-col items-center justify-center py-6 text-center">
+            <div class="absolute right-0 top-0 flex gap-2">
+                <button id="novel-logout-btn" data-action="logout" aria-label="로그아웃" title="로그아웃" class="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 hover:shadow-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.5 4H6.75A1.75 1.75 0 0 0 5 5.75v12.5C5 19.217 5.783 20 6.75 20h7.75" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m15 8 4 4-4 4m4-4H10" />
+                    </svg>
+                </button>
+            </div>
             <div class="w-full max-w-md">
                 <p class="mb-2 text-xs font-bold uppercase tracking-[0.28em] text-blue-500">Reading journey</p>
                 <h1 class="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">NOVELS</h1>
@@ -132,7 +145,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 6.5h16M4 12h16M4 17.5h16" />
                     </svg>
                 </button>
-                <button id="logout-btn" aria-label="로그아웃" title="로그아웃" class="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 hover:shadow-md">
+                <button id="logout-btn" data-action="logout" aria-label="로그아웃" title="로그아웃" class="hidden h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 hover:shadow-md">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M14.5 4H6.75A1.75 1.75 0 0 0 5 5.75v12.5C5 19.217 5.783 20 6.75 20h7.75" />
                         <path stroke-linecap="round" stroke-linejoin="round" d="m15 8 4 4-4 4m4-4H10" />
