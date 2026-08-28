@@ -1,0 +1,135 @@
+CH 1 Q1 | 릴리가 자신에게 있다고 믿는 능력은?
+정답: 투명해지는 것
+evidence: [RED: I can turn invisible. It’s a superpower, or at least a secret power. But it’s not like in the movies, and I’m not a superhero, so don’t start thinking that.] Heroes are the stars who save the day.
+
+CH 1 Q2 | 언니 샘은 릴리의 그 능력을 뭐라고 부르나요?
+정답: 그냥 수줍음
+evidence: But now I understand: it’s because I’m magic. [RED: My older sister, Sam, says it’s not a real supersecret power—it’s just called being shy. But Sam can be rude.] And the truth is, my power can come in handy.
+
+CH 1 Q3 | What is the name of Halmoni's town?
+정답: Sunbeam
+evidence: But she ticks the windshield wipers up a notch and taps the brakes until we’re going slug-slow. [RED: The rain started as soon as we entered Washington State, and it only gets worse as our car inches past the hand-painted WELCOME TO SUNBEAM! sign.] Welcome to Halmoni’s town, a town of nonstop rain, its name like an inside joke.
+
+CH 1 Q4 | 엄마가 캘리포니아를 떠난 이유로 든 것은?
+정답: 할머니와 더 지내려고
+evidence: I’m just trying not to think about that. [RED: “I thought you should spend more time with your grandmother. I thought you enjoyed that.” Mom’s tone is clipped.] The rain has gotten heavier, and it sucks up her focus.
+
+CH 1 Q5 | 가족이 빗길 운전을 특히 불안해하는 이유는?
+정답: 아빠가 사고로 돌아가셔서
+evidence: The rain has gotten heavier, and it sucks up her focus. [RED: Her fingers white-knuckle the steering wheel. None of us like the idea of driving in this weather, not after Dad died.] I concentrate on the steering wheel and squint a little, sending safety vibes with my mind, like Halmoni taught me.
+
+CH 1 Q6 | 릴리가 들은 '쿵' 소리의 정체는?
+정답: 샘의 휴대폰이 떨어진 소리
+evidence: Nothing’s there. [RED: Mom’s jaw tightens. “Sam, please don’t throw your expensive phone around.” I stare at them, confused.] If the thud was just her phone hitting the floor—
+
+CH 1 Q7 | What happens to the tiger after the car passes?
+정답: It disappears.
+evidence: If the thud was just her phone hitting the floor— [RED: I twist to look for the tiger, but all I see is rain and road. The tiger disappeared.] “Lily?”
+
+CH 2 Q1 | 할머니가 이야기를 시작할 때 늘 쓰는 첫 문장은?
+정답: Long, long ago, when tiger walked like man...
+evidence: [RED: Halmoni’s stories all start the same way, with the Korean version of “once upon a time”: Long, long ago, when tiger walked like man…] Back in California, in the weeks leading up to Halmoni’s visits, Sam and I would whisper those words to one another.
+
+CH 2 Q2 | 자매가 가장 좋아하는 이야기의 두 주인공은?
+정답: 언니(Unya)와 동생(Eggi)
+evidence: Our favorite story. [RED: “The one about Unya,” Sam would say. Big sister. “And Eggi,” I would add. Baby sister. “The tiger story.”] That story always felt special, like there was a secret shimmering beneath the words.
+
+CH 2 Q3 | Why must they run to the house in the rain?
+정답: Mom forgot the umbrellas.
+evidence: She plasters a grin on her face, trying to be cheerful, to erase all the bickering and stress of the car ride. [RED: “Bad news: I left the umbrellas back in California.” She grins, like Ha-ha, whoops, funny. “So we’ve just gotta make a break for it.”] I stare at Halmoni’s home.
+
+CH 2 Q4 | Where is Halmoni's house?
+정답: Across from the library
+evidence: Finally, we reach Halmoni’s house. [RED: It’s a small cottage, at the edge of town, at the top of a hill, across the street from the library and surrounded by woods.] Mom turns onto the long driveway, and we crunch-crunch up the gravel, until we reach the top.
+
+CH 2 Q5 | 현관에 도착한 세 사람에게 벌어진 일은?
+정답: 문이 잠겨 있고 할머니가 없었다
+evidence: By the time Sam and I get to the top of the stairs—panting, dripping—I’ve wrung all the air out of my lungs, and my heart is bursting. [RED: Mom waits for us on the front stoop, which is nice, I guess, but kind of strange because she should open the door and go inside. She shakes her head and frowns. “Halmoni isn’t answering,” she says. “She’s not here.”]
+
+CH 3 Q1 | 엄마가 잠긴 집에 들어간 방법은?
+정답: 거실 창문으로 넘어 들어갔다
+evidence: “Well, this is normal,” Sam says, voice laced with sarcasm. [RED: Then Mom shoves the window open. She glances over at us before hoisting herself up and tumbling headfirst into the house.] “Whoa,” I whisper.
+
+CH 3 Q2 | 아빠가 돌아가셨을 때 두 자매의 나이는?
+정답: 샘 7살, 릴리 4살
+evidence: “That’s just naive,” she mutters. [RED: Thinking about Dad is different for Sam than it is for me. She’s old enough to remember him. When he died in a car accident, she was seven. I was only four.] “Sam…,” I start, but I don’t know how to finish the sentence.
+
+CH 3 Q3 | What is blocking the basement door?
+정답: Korean chests and boxes
+evidence: At the other end of the living room, there’s Halmoni’s bedroom, the bathroom, and two staircases: one that goes up to the attic bedroom, and one that goes down to the basement. [RED: But now, in front of the basement door, there’s a tower of engraved Korean chests and cardboard boxes, stacked like a barricade.] Mom shakes her head.
+
+CH 3 Q4 | 릴리가 할머니 집에서 맡은 냄새가 아닌 것은?
+정답: 갓 내린 커피
+evidence: And everywhere—in baskets hung from the ceiling, sitting on countertops, stuffed into bowls—are bundles of herbs and smudge sticks, to cast away bad energy. [RED: When I breathe the house in, the scent of buckwheat noodles, sage, and laundry detergent smells like home.] Sam’s less happy.
+
+CH 3 Q5 | 예전에 이 집에 살 때 두 자매의 잠자리는 어땠나요?
+정답: 침대를 붙여 놓고 함께 잤다
+evidence: Upstairs, the attic room is creaky-cozy, with peaked ceilings, a full-length, wood-framed mirror, and two twin beds dressed in faded quilts. [RED: When Sam and I lived here, we pushed the beds together and curled into one another, trading stories in the dark. Now the beds are on opposite sides of the room, separated by the wide window.] Sam throws off her wet clothes, smears her dark makeup onto the clean towel, and tugs the black sequined nightgown on.
+
+CH 3 Q6 | 샘이 쓴 'QAG'는 무엇의 줄임말인가요?
+정답: Quiet Asian Girl
+evidence: You’re being a QAG.” [RED: QAG is Sam for Quiet Asian Girl. As in, a stereotype.] As in, Sam tries so hard not to be a stereotype that she wears black lipstick and bleached a lock of her hair and says every little thought that comes to mind.
+
+CH 3 Q7 | What does Lily think will happen if she rocks the boat too?
+정답: The boat will flip.
+evidence: You don’t have to be so afraid to rock the boat, you know.” [RED: What Sam doesn’t realize is that she’s already rocking our boat. If I rock it, too, the boat will flip. We’ll drown.] I listen to the rain beat against the roof, and I run my hand over the quilt.
+
+CH 3 Q8 | 3장 마지막에 벌어진 일은?
+정답: 할머니가 돌아왔다
+evidence: “Yeah,” I reply. [RED: I almost feel like I could tell her about the tiger dream-mirage-spirit thing. Then, downstairs, the door slams open. Halmoni’s home.]
+
+CH 4 Q1 | 할머니가 집에 들어서며 두 팔 가득 안고 있던 것은?
+정답: 음식이 든 장바구니 네 개
+evidence: Her jewel pendant rests in the U-shaped dip between her collarbones, deeper than before. [RED: But she’s still as glamorous as always, with her lips bright red, her hair permed and dyed blackest black. In her arms, she carries four big grocery bags, filled to the brim with food.] Mom’s already at the door, dressed in Halmoni’s pajamas and greeting her with questions—“Why weren’t you here?
+
+CH 4 Q2 | What does Halmoni say about Sam's white streak?
+정답: It runs in the family.
+evidence: It’s unnatural.” Sam glares at Mom, and [RED: Halmoni twirls the streak in her fingers. “It run in our family. I have this when I little, too,” she says, winking at Sam and me. Mom’s voice is tight. “A bleached streak is not a genetic trait.”] Halmoni doesn’t even look at her.
+
+CH 4 Q3 | How does Halmoni stop Mom from lecturing her?
+정답: She makes a sharp hissing noise.
+evidence: You need to—” [RED: “Tsst,” Halmoni hisses, holding up one finger. Sam and I used to watch a TV show about a dog trainer who used an angry hissing noise to tame dogs. This is the same noise.] Mom clenches her jaw, then tries another line of questioning.
+
+CH 4 Q4 | 할머니가 지하실 물건을 위로 올린 이유로 댄 것은?
+정답: 지하실에 물이 차서
+evidence: She gestures to the stack of boxes and furniture in front of the basement door. [RED: Halmoni shrugs one shoulder. “The basement flood, so the stuff come up.”] Sam raises an eyebrow.
+
+CH 4 Q5 | 엄마는 어디서 자게 되었나요?
+정답: 거실 소파
+evidence: You—” She pauses. [RED: “Where am I supposed to sleep?” When we lived here before, Mom slept in the basement, wedged in between all Halmoni’s things. “You sleep in living room, on the couch,” Halmoni responds, like this is no big deal.] I expect Mom to argue, but she walks over to the boxes.
+
+CH 4 Q6 | 할머니가 오늘은 상자를 옮기면 안 된다고 한 이유는?
+정답: 오늘은 길한 날이 아니라서
+evidence: Halmoni waves her arms in front of her, like she’s warding off Mom’s annoyance. [RED: “No, no. Today is not auspicious day. When I move boxes out, that is a lucky day. But today is dangerous day for spirits. We move another day.”] A dangerous day for spirits.
+
+CH 4 Q7 | 할머니가 고사를 특히 꼭 지내야 한다고 말한 날은?
+정답: 큰 변화가 있는 날
+evidence: They warm my fingers. [RED: “This very important to do on days of big change,” Halmoni tells me as she pours wine into small ceramic bowls. “When people come in. When people go out. We do this to keep spirits happy.”] She leans closer, her breath tickling my ear.
+
+CH 4 Q8 | 샘이 고사를 싫어하게 된 계기는?
+정답: 릴리가 그 음식이 아빠를 위한 것이라고 말해서
+evidence: When I was little, I used to pretend that Dad would come for kosa, to eat with us. [RED: I made the mistake of telling Sam once that the food was for him. Her face twisted up and she spat, He’s dead. This isn’t a game. She never liked kosa after that.] After Halmoni heats a plate of red-bean rice cakes, she hands them to me, and I arrange them in a bamboo basket, the way she taught me.
+
+CH 4 Q9 | What does Halmoni say the tigers want back?
+정답: Something she stole from them
+evidence: “Like what?” [RED: “The tigers looking for me,” she says, running her hand down my arm, lost in thought. “I steal something that belong to them—long, long ago, when I little like you—and now they want it back.”] “Wait, what?
+
+CH 5 Q1 | 이야기 속 할머니가 마을에 간 이유는?
+정답: 손녀들에게 줄 떡을 사려고
+evidence: They were sisters, with long black braids, and they shared everything together, including a love of rice cakes. [RED: One day, the halmoni went into the village to buy rice cakes for her girls, but a tiger stopped her as she walked home.] He came out of nowhere—as if he had jumped from the sky—and stood right in front of her, blocking the path.
+
+CH 5 Q2 | What did the tiger wear as a disguise?
+정답: The halmoni’s head scarf
+evidence: He wasn’t satisfied—tigers never are—but he was clever. [RED: He took Halmoni’s head scarf, and when he went to the little cottage days later, he wore it as a disguise.] Knocking on their door, the tiger said, Little girls, I am your halmoni.
+
+CH 5 Q3 | 두 소녀가 결국 문을 열어 준 까닭은?
+정답: 동생이 할머니가 너무 그리워서
+evidence: Little treats for Unya, for Eggi. [RED: The little sister wanted her halmoni so badly. And the tiger called to her, Trust me, Little Egg. Believe. So she ran to the front door and pulled it open.] Eggi held her breath, waiting.
+
+CH 5 Q4 | What did the sky god ask for in exchange for saving the girls?
+정답: A story
+evidence: Please please please. [RED: To her surprise, the sky god talked back. Hmmm, he said. Okay, fine. But tell me a story in exchange. Not even sky gods can resist a story.] So Eggi and Unya thought fast, and they told him a story.
+
+CH 5 Q5 | 두 자매가 해와 달의 자리를 바꾼 이유는?
+정답: 동생이 사람들의 시선을 싫어해서
+evidence: So the older sister became the sun, and the younger sister became the moon. [RED: Unya was happy, but Eggi cried. Everyone always stared up at the moon, and she didn’t like that. She wanted to hide.] So the elder offered to trade places.

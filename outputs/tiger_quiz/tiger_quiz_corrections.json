@@ -1,0 +1,137 @@
+[
+  {
+    "chapter": 4,
+    "questionNo": 2,
+    "column": "evidence",
+    "row": 23,
+    "address": "J23",
+    "oldValue": "Halmoni twirls the streak in her fingers. “It run in our family. I have this when I little, too,” she says, winking at Sam and me. Mom’s voice is tight. “A bleached streak is not a genetic trait.”",
+    "newValue": "Sam glares at Mom, and Halmoni twirls the streak in her fingers. “It run in our family. I have this when I little, too,” she says, winking at Sam and me. Mom’s voice is tight. “A bleached streak is not a genetic trait.”"
+  },
+  {
+    "chapter": 10,
+    "questionNo": 8,
+    "column": "evidence",
+    "row": 62,
+    "address": "J62",
+    "oldValue": "Like, sometimes I pick up waitressing shifts at the only Asian restaurant in town—you know, Dragon Thyme? And I know, it’s a pretty cheesy name, and there’s no thyme in Asian food, but that’s just the town we live in",
+    "newValue": "“I doubt we have a book of Korean folktales in this library, though.” She raises an eyebrow. “To be honest, this town is pretty white, so you’re not going to find much about other cultures. Like, sometimes I pick up waitressing shifts at the only Asian restaurant in town—you know, Dragon Thyme? And I know, it’s a pretty cheesy name, and there’s no thyme in Asian food, but that’s just the town we live in….”"
+  },
+  {
+    "chapter": 13,
+    "questionNo": 4,
+    "column": "explanation",
+    "row": 80,
+    "address": "K80",
+    "oldValue": "릴리는 119를 떠올렸지만 할머니는 엄마를 찾았습니다.",
+    "newValue": "릴리는 911에 전화하자고 했지만 할머니는 엄마를 찾았습니다."
+  },
+  {
+    "chapter": 16,
+    "questionNo": 6,
+    "column": "evidence",
+    "row": 97,
+    "address": "J97",
+    "oldValue": "I don’t have a word brain. That’s why. Or a numbers one, I guess. But I’m going to be a psychologist. I have a very intuitive understanding of the human psyche,” he says, as if he’s reciting something he read online.",
+    "newValue": "“The tutoring isn’t because I’m stupid,” Ricky says as soon as Jensen leaves. “It’s just because I don’t have a word brain. That’s why. Or a numbers one, I guess. But I’m going to be a psychologist. I have a very intuitive understanding of the human psyche,” he says, as if he’s reciting something he read online. “I’m very good at reading people.”"
+  },
+  {
+    "chapter": 18,
+    "questionNo": 2,
+    "column": "evidence",
+    "row": 106,
+    "address": "J106",
+    "oldValue": "he’s got about a thousand yards of rope wrapped around his waist and is wearing head-to-toe camouflage—including a camo-patterned top hat.",
+    "newValue": "Ricky arrives on his bike a few hours later, after Mom takes Halmoni to a follow-up doctor’s appointment. Sam’s upstairs, so it’s just me in the living room, which is probably good, because he’s got about a thousand yards of rope wrapped around his waist and is wearing head-to-toe camouflage—including a camo-patterned top hat."
+  },
+  {
+    "chapter": 19,
+    "questionNo": 3,
+    "column": "evidence",
+    "row": 114,
+    "address": "J114",
+    "oldValue": "Because it’s really not my fault. But anyway, that’s why I’m getting tutored this summer. If I don’t pass a test in a couple of weeks, I’ll have to repeat sixth grade.”",
+    "newValue": "“Yeah, that’s true,” he says, sitting on the box next to me. “I failed language arts last year.”"
+  },
+  {
+    "chapter": 19,
+    "questionNo": 3,
+    "column": "explanation",
+    "row": 114,
+    "address": "K114",
+    "oldValue": "시험에 떨어지면 6학년을 다시 다녀야 합니다.",
+    "newValue": "지난해 language arts 과목에 낙제해 여름 과외를 받고 있습니다."
+  },
+  {
+    "chapter": 21,
+    "questionNo": 3,
+    "column": "evidence",
+    "row": 126,
+    "address": "J126",
+    "oldValue": "She picks a dried herb from her sharp teeth. “Nice mugwort, by the way.” I feel for the mugwort in my pocket, but it’s gone",
+    "newValue": "She picks a dried herb from her sharp teeth. “Nice mugwort, by the way.” I feel for the mugwort in my pocket, but it’s gone—and in a flash of orange and black, the tiger disappears, too. My trap is empty."
+  },
+  {
+    "chapter": 22,
+    "questionNo": 1,
+    "column": "evidence",
+    "row": 129,
+    "address": "J129",
+    "oldValue": "there was a girl born of two worlds. She had two sets of skin and she could shift as she pleased: tiger to human, human to tiger.",
+    "newValue": "Long, long ago, when man walked like tiger, when nights were dark as ink, long before the sun and the moon and even the stars—there was a girl born of two worlds. She had two sets of skin and she could shift as she pleased: tiger to human, human to tiger."
+  },
+  {
+    "chapter": 22,
+    "questionNo": 3,
+    "column": "evidence",
+    "row": 131,
+    "address": "J131",
+    "oldValue": "your baby must live alone in a cave for one hundred days, without the sun. Oh, and she can only eat mugwort.",
+    "newValue": "The sky god was not pleased. He does not typically grant favors. But she begged and begged. So the sky god said, Yes, fine. I will grant your wish. I can take away your magic, and your baby’s, but first…hmm…your baby must live alone in a cave for one hundred days, without the sun. Oh, and she can only eat mugwort."
+  },
+  {
+    "chapter": 26,
+    "questionNo": 1,
+    "column": "evidence",
+    "row": 154,
+    "address": "J154",
+    "oldValue": "I slam my phone alarm off as soon as it beeps me awake, and I slip out of bed, eager to meet with the tiger. I grab the tall, thin jar and the plate of rice cakes from under my bed",
+    "newValue": "I slam my phone alarm off as soon as it beeps me awake, and I slip out of bed, eager to meet with the tiger. I grab the tall, thin jar and the plate of rice cakes from under my bed and pad over to the stairs—but a rustling in the corner of the room stops me."
+  },
+  {
+    "chapter": 26,
+    "questionNo": 2,
+    "column": "evidence",
+    "row": 155,
+    "address": "J155",
+    "oldValue": "I realize she’s tying a rope to her bed frame. And not just any rope—but the rope Ricky and I used on the tiger trap.",
+    "newValue": "I walk over to her, and when I’m close enough, I realize she’s tying a rope to her bed frame."
+  },
+  {
+    "chapter": 35,
+    "questionNo": 4,
+    "column": "evidence",
+    "row": 208,
+    "address": "J208",
+    "oldValue": "She shakes her head and does that squint, like when she’s lost something in her memory and can’t find it. “No, little one. I think I get those here, from fly market.”",
+    "newValue": "She shakes her head and does that squint, like when she’s lost something in her memory and can’t find it. “No, little one. I think I get those here, from fly market.” “Fly market?” I blink, trying to decipher her words. And then, “You mean flea market? You found them at a flea market? In Sunbeam?” She nods. “Yes, yes. Flea market. One by the coast.”"
+  },
+  {
+    "chapter": 38,
+    "questionNo": 3,
+    "column": "evidence",
+    "row": 220,
+    "address": "J220",
+    "oldValue": "“She was helping me scatter the rice,” Sam says. “She’s been helping me.”",
+    "newValue": "“Why would Jensen be driving? She’s probably sleeping.” “She was helping me scatter the rice,” Sam says. “She’s been helping me.”"
+  },
+  {
+    "chapter": 40,
+    "questionNo": 2,
+    "column": "evidence",
+    "row": 227,
+    "address": "J227",
+    "oldValue": "It’s a long shot, I know, but I tap the side of the pane, run my hands over the windowsill, and thump a fist right below the glass.",
+    "newValue": "I try one of the windows, but it doesn’t open. And I feel hopeless until I remember: Mom, outside Halmoni’s house. It’s a long shot, I know, but I tap the side of the pane, run my hands over the windowsill, and thump a fist right below the glass. I hold my breath and think, Please. Then I push. Like a miracle, the window opens."
+  }
+]
