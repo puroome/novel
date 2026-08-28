@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'wonder-reading-shell-v12';
+const CACHE_VERSION = 'wonder-reading-shell-v13';
 // 개발 중에는 고친 파일이 바로 보여야 합니다. 배포된 주소에서만 캐시를 먼저 씁니다.
 const DEV_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 const IS_DEV_HOST = DEV_HOSTS.includes(self.location.hostname);

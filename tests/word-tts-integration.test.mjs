@@ -14,7 +14,9 @@ test('어휘·배경지식·퀴즈의 TTS 클릭 단위가 서비스 워커 캐�
     assert.match(app, /\.map\(renderCollocationEntry\)/);
     assert.match(app, /ttsTextAttribute\(sentenceTextForSpeech\(item\.sentence\)\)/);
     assert.match(app, /ttsTextAttribute\(sentenceTextForSpeech\(item\.title\)\)/);
-    assert.match(app, /ttsTextAttribute\(question\.evidence\)/);
+    // 근거 원문에도 [RED: ]가 들어가므로, 읽어 줄 때는 그 표시를 뺍니다.
+    assert.match(app, /ttsTextAttribute\(sentenceTextForSpeech\(question\.evidence\)\)/);
+    assert.match(app, /renderMarkedText\(question\.evidence\)/);
     assert.match(app, /getElementById\('word-list'\)\.addEventListener\('click', handleTtsClick\)/);
     assert.match(app, /getElementById\('explanation-box'\)\.addEventListener\('click', handleTtsClick\)/);
     assert.match(serviceWorker, /'\.\/js\/tts\.js'/);

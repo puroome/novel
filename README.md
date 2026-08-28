@@ -31,13 +31,35 @@ Google Sheets (소설마다 word / bg / quiz)
 
 ### `AllowedUsers`
 
-| Email | Name | Grade | Permission | Edit | wonder | tiger | … |
-|---|---|---|---|---|---|---|---|
+| Email | Name | Grade | Permission | Edit | wonder | wonder_test | tiger | tiger_test | … |
+|---|---|---|---|---|---|---|---|---|---|
 
 - `Permission`, `Edit`: `yes` 또는 `no`
 - `Edit=yes`이면 `Permission=yes`여야 합니다.
 - **`novels` 시트의 `id`마다 같은 이름의 열이 있어야 합니다.** 빈칸은 오류입니다.
 - `Permission=no`이면 소설 열이 `yes`여도 모두 막힙니다.
+
+#### `{id}_test` — 퀴즈를 공개한 챕터
+
+퀴즈는 수업에서 함께 푸는 것이라 미리 다 보이면 안 됩니다. 소설 열 오른쪽에
+`{id}_test` 열을 두고, 학생마다 **이미 함께 푼 챕터 범위**를 적으면 그 챕터의 퀴즈만
+목록에 나옵니다. 함께 푼 뒤에 범위를 넓혀 주면 복습할 수 있습니다.
+
+| 입력 | 뜻 |
+|---|---|
+| (빈칸) | 퀴즈가 하나도 보이지 않습니다 |
+| `1-10` | 1~10장의 퀴즈만 보입니다 |
+| `3` | 3장만 보입니다 |
+| `1-10, 15` | 쉼표로 여러 구간을 적을 수 있습니다 |
+| `all` | 모든 챕터가 보입니다 |
+
+- 값은 `{id}_word` 시트의 `chapter_no`를 가리킵니다.
+- **`novels` 시트의 `id`마다 이 열이 있어야 합니다.** 없으면 `허용 명단 동기화`가
+  멈춥니다. 모두 열어 두려면 열을 지우지 말고 `all`이라고 적으세요.
+- 형식이 틀리면 `허용 명단 동기화`가 해당 행 번호를 알려 주고 멈춥니다.
+- **어휘와 배경지식은 이 열의 영향을 받지 않습니다.** 언제나 모든 챕터가 보입니다.
+- 이것도 소설별 접근 제어와 마찬가지로 **화면 단에서만 가립니다.** 아래 「Firebase
+  보안 규칙」의 주의와 같은 상황입니다.
 
 ### 소설별 학습 자료 시트
 
@@ -46,20 +68,24 @@ Google Sheets (소설마다 word / bg / quiz)
 
 ### `{id}_word`
 
-| part_title | chapter_no | chapter_title | word | meaning | relative | collocation | sentence | page |
-|---|---|---|---|---|---|---|---|---|
+| part_title | chapter_no | chapter_title | word | meaning | relative | collocation | sentence |
+|---|---|---|---|---|---|---|---|
 
 - `relative`: 항목을 `;`로 구분합니다. 앱에서는 타원형 칩으로 표시됩니다.
 - `collocation`: 항목을 `;`로 구분합니다. 앱에서는 칩 없이 한 줄에 하나씩 표시됩니다.
 - `sentence`: 강조할 어휘를 `[ ]`로 정확히 한 번 감쌉니다.
 - `chapter_title`: **`Chapter 1:` 접두어를 넣지 않습니다.** 앱이 `Chapter {번호}: {제목}`으로 조립합니다.
-- `part_title`: 화면에서 챕터를 묶는 이름입니다. 파트가 없는 소설은 아무 이름이나 하나로 통일하면 한 묶음으로 나옵니다.
+- `part_title`: 화면에서 챕터를 묶는 이름입니다. 파트가 없는 소설은 아무 이름이나 하나로 통일하면 한 묶음으로 나옵니다. **세 시트 가운데 이 열은 여기에만 둡니다** — `{id}_bg`와 `{id}_quiz`는 같은 `chapter_no`의 이 행에서 물려받습니다.
 - 품사 열과 품사 표시는 사용하지 않습니다.
+- `page` 열은 없습니다. 학생이 보는 실물 책은 출판사마다 쪽번호가 달라 원서 쪽수가 맞지 않습니다.
 
 ### `{id}_bg`
 
-| part_title | chapter_no | chapter_title | eng | kor | remark |
-|---|---|---|---|---|---|
+| chapter_no | chapter_title | eng | kor | remark |
+|---|---|---|---|---|
+
+- `part_title` 열은 없습니다. 같은 `chapter_no`의 `{id}_word` 행에서 물려받습니다.
+- 배경지식이 하나도 없는 챕터는 그냥 빼면 됩니다. 다만 `{id}_word`에 없는 `chapter_no`를 넣으면 동기화가 거부됩니다.
 
 ### `{id}_quiz`
 
@@ -68,7 +94,7 @@ Google Sheets (소설마다 word / bg / quiz)
 
 - `answer`: `1`, `2`, `3`, `4` 중 하나입니다.
 - `evidence`: 정답 확인 뒤 기존 원문 근거 박스에 표시됩니다.
-- `part_title` 열은 없습니다. 같은 `chapter_no`의 `{id}_word`·`{id}_bg` 행에서 물려받습니다.
+- `part_title` 열은 없습니다. 같은 `chapter_no`의 `{id}_word` 행에서 물려받습니다.
 
 ## Apps Script 설정
 
@@ -88,12 +114,26 @@ Google Sheets (소설마다 word / bg / quiz)
 
 코드를 변경한 뒤에는 기존 배포를 새 버전으로 업데이트합니다.
 
+> **저장만 하면 절반만 반영됩니다.** Apps Script는 코드가 두 벌로 돕니다. 시트 메뉴의
+> 동기화는 편집기에 **저장된** 코드가, 앱이 부르는 `session` 요청(`doGet`)은
+> **배포된** 코드가 처리합니다. 붙여넣고 저장만 하면 동기화는 성공했다고 나오는데
+> 앱은 예전 응답을 받습니다. **배포 → 배포 관리 → 연필 → 버전 `새 버전` → 배포**까지
+> 해야 합니다. 퀴즈 공개 범위가 적용되지 않을 때 가장 먼저 확인할 곳입니다.
+
 ## Firebase 보안 규칙
 
 Realtime Database의 **규칙** 화면에 `firebase.rules.json`의 내용을 적용합니다.
 
 콘텐츠는 Firebase Authentication에 로그인했고 `AllowedUsers`에서 승인된 UID만 읽을 수
-있습니다. 사용자 명단, 이메일-UID 인덱스, 권한 인덱스는 클라이언트에서 읽을 수 없습니다.
+있습니다. 사용자 명단과 이메일-UID 인덱스는 클라이언트에서 읽을 수 없습니다.
+
+권한 인덱스(`novel/accessByUid`)는 **자기 uid 노드 하나만** 읽을 수 있습니다. 앱이
+소설별 권한과 퀴즈 공개 범위를 Apps Script를 거치지 않고 바로 받기 위한 것입니다.
+규칙은 아래로만 내려가므로 `novel/accessByUid` 전체를 훑는 것은 여전히 막힙니다.
+
+> **규칙은 저장소 파일이 아니라 Firebase 서버에 있습니다.** `firebase.rules.json`은
+> 기록용 사본이며 Firebase가 자동으로 읽지 않습니다. 고쳤다면 콘솔의 **규칙** 화면에
+> 붙여 넣어야 실제로 적용됩니다.
 
 ## 동기화 순서
 
@@ -140,9 +180,14 @@ npm run build:css
 `firebase.rules.json`의 `accessByUid` 규칙이 이미 접근을 막고 있으므로, 목록을 읽어 냈다면
 승인된 사용자라는 뜻입니다. 소설을 고르면 그때 그 소설의 콘텐츠 버전을 구독합니다.
 
-Apps Script는 두 경우에만 호출합니다. 아직 승인되지 않은 사용자를 확인할 때, 그리고
-이 학생이 볼 수 있는 소설 목록을 받아 올 때입니다. 후자는 로그인당 한 번만 물어보고
-`sessionStorage`에 적어 둡니다.
+Apps Script는 **아직 승인되지 않은 사용자를 확인할 때만** 호출합니다. 승인된 학생의
+소설별 권한과 퀴즈 공개 범위는 `novel/accessByUid/{uid}`에서 바로 읽습니다. 이미 열려
+있는 Firebase 연결을 쓰므로 기다림이 없고, 시트를 다시 동기화하면 **새로고침만으로**
+반영됩니다.
+
+> 보안 규칙에 `accessByUid` 읽기를 아직 넓히지 않았다면 이 읽기가 막히고, 앱은 예전처럼
+> Apps Script에 물어본 뒤 `sessionStorage`에 적어 둡니다. 동작은 같지만 목록이 뜨기까지
+> 몇 초 걸리고, 시트를 고쳐도 탭을 새로 열어야 반영됩니다.
 
 > **`허용 명단 동기화`를 한 번은 실행해야 소설별 권한이 적용됩니다.** 아직 실행하지
 > 않았다면 권한 목록이 비어 있고, 그때는 앱이 목록을 가리지 않고 모든 소설을 보여 줍니다.

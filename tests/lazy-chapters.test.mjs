@@ -11,13 +11,13 @@ const sheets = {
         ['wonder', 'Wonder', 'R. J. Palacio', 'wonder.webp', '1', 'yes']
     ],
     wonder_word: [
-        ['part_title', 'chapter_no', 'chapter_title', 'word', 'meaning', 'relative', 'collocation', 'sentence', 'page'],
-        ['Part One: August', '1', 'Ordinary', 'ordinary', '평범한', 'ordinarily (보통)', 'ordinary life (평범한 삶)', 'I feel [ordinary].', '11'],
-        ['Part One: August', '2', 'Why I Didn\'t Go to School', 'nervous', '긴장한', 'nervously (초조하게)', 'get nervous (긴장하다)', 'I was [nervous].', '13']
+        ['part_title', 'chapter_no', 'chapter_title', 'word', 'meaning', 'relative', 'collocation', 'sentence'],
+        ['Part One: August', '1', 'Ordinary', 'ordinary', '평범한', 'ordinarily (보통)', 'ordinary life (평범한 삶)', 'I feel [ordinary].'],
+        ['Part One: August', '2', 'Why I Didn\'t Go to School', 'nervous', '긴장한', 'nervously (초조하게)', 'get nervous (긴장하다)', 'I was [nervous].']
     ],
     wonder_bg: [
-        ['part_title', 'chapter_no', 'chapter_title', 'eng', 'kor', 'remark'],
-        ['Part One: August', '1', 'Ordinary', 'a magic lamp', '요술 램프', '소원을 이루어 주는 램프입니다.']
+        ['chapter_no', 'chapter_title', 'eng', 'kor', 'remark'],
+        ['1', 'Ordinary', 'a magic lamp', '요술 램프', '소원을 이루어 주는 램프입니다.']
     ],
     wonder_quiz: [
         ['chapter_no', 'chapter_title', 'question_no', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4', 'answer', 'evidence', 'explanation'],

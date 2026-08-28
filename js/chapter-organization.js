@@ -61,3 +61,37 @@ export function groupChaptersByCategory(chapters) {
 
     return [...groups.entries()].map(([category, entries]) => ({ category, entries }));
 }
+
+// --- 퀴즈 공개 범위 ---
+// AllowedUsers의 '{소설 id}_test' 열을 Apps Script가 '1-10,15-15' 꼴로 다듬어
+// 보내 줍니다. 퀴즈는 수업에서 함께 푸는 것이라, 여기 적힌 챕터만 목록에 나옵니다.
+const UNRESTRICTED_RANGE = 'all';
+
+/**
+ * 범위 문자열을 {from, to} 목록으로 바꿉니다.
+ * `null`이면 제한이 없고, 빈 배열이면 공개된 챕터가 하나도 없다는 뜻입니다.
+ */
+export function parseChapterRanges(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return [];
+    if (text.toLowerCase() === UNRESTRICTED_RANGE) return null;
+
+    const ranges = [];
+    text.split(',').forEach(segment => {
+        const match = segment.trim().match(/^(\d+)\s*(?:[-~]\s*(\d+))?$/);
+        if (!match) return;
+
+        const from = Number.parseInt(match[1], 10);
+        const to = match[2] === undefined ? from : Number.parseInt(match[2], 10);
+        if (to >= from) ranges.push({ from, to });
+    });
+    // 적어 둔 값이 하나도 해석되지 않으면 시트가 잘못된 것입니다. 이때 모두
+    // 보여 주면 공개 전 퀴즈가 새어 나가므로, 아무것도 보이지 않게 둡니다.
+    return ranges;
+}
+
+export function isChapterVisible(ranges, chapterNo) {
+    if (ranges === null) return true;
+    if (!Number.isInteger(chapterNo)) return false;
+    return ranges.some(range => chapterNo >= range.from && chapterNo <= range.to);
+}

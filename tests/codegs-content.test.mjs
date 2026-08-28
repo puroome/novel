@@ -10,12 +10,12 @@ const sheets = {
         ['wonder', 'Wonder', 'R. J. Palacio', 'wonder.webp', '1', 'yes']
     ],
     wonder_word: [
-        ['part_title', 'chapter_no', 'chapter_title', 'word', 'meaning', 'relative', 'collocation', 'sentence', 'page'],
-        ['Part One: August', '1', 'Ordinary', 'ordinary', '평범한', 'ordinarily (보통); ordinariness (평범함)', 'ordinary life (평범한 삶); out of the ordinary (특이한)', 'I feel [ordinary].', '11']
+        ['part_title', 'chapter_no', 'chapter_title', 'word', 'meaning', 'relative', 'collocation', 'sentence'],
+        ['Part One: August', '1', 'Ordinary', 'ordinary', '평범한', 'ordinarily (보통); ordinariness (평범함)', 'ordinary life (평범한 삶); out of the ordinary (특이한)', 'I feel [ordinary].']
     ],
     wonder_bg: [
-        ['part_title', 'chapter_no', 'chapter_title', 'eng', 'kor', 'remark'],
-        ['Part One: August', '1', 'Ordinary', 'a magic lamp', '요술 램프', '소원을 이루어 주는 마법의 램프입니다.']
+        ['chapter_no', 'chapter_title', 'eng', 'kor', 'remark'],
+        ['1', 'Ordinary', 'a magic lamp', '요술 램프', '소원을 이루어 주는 마법의 램프입니다.']
     ],
     wonder_quiz: [
         ['chapter_no', 'chapter_title', 'question_no', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4', 'answer', 'evidence', 'explanation'],
@@ -112,7 +112,21 @@ test('Code.gs는 파트 이름을 챕터 번호로 계산하지 않고 시트 �
     const context = await loadCodeGs({ wonder_word: word });
     const content = context.buildNovelContent(WONDER);
 
+    // bg·quiz 시트에는 part_title 열이 없어 같은 챕터의 word 행에서 물려받습니다.
+    // 챕터 1에는 bg 행도 있으므로, 이 값이 word 한 곳에서만 나온다는 뜻입니다.
     assert.equal(content.word.index[0].partTitle, 'When You Trap a Tiger');
-    // quiz 시트에는 part_title 열이 없어 같은 챕터의 word 행에서 물려받습니다.
     assert.equal(content.quiz.index[0].partTitle, 'When You Trap a Tiger');
+});
+
+// 어휘가 하나도 없는 챕터는 없으므로, bg에만 있는 챕터는 오타로 봅니다.
+// 그냥 두면 파트 이름을 못 받아 목차에서 'Other'로 조용히 빠집니다.
+test('Code.gs는 word에 없는 챕터의 배경지식을 거부한다', async () => {
+    const background = sheets.wonder_bg.map(row => [...row]);
+    background.push(['9', 'Padawan', 'padawan', '파다완', '《스타워즈》에서 제다이 견습생을 부르는 말입니다.']);
+    const context = await loadCodeGs({ wonder_bg: background });
+
+    assert.throws(
+        () => context.buildNovelContent(WONDER),
+        /'wonder_bg' 시트 3행: Chapter 9가 'wonder_word'에 없습니다/
+    );
 });

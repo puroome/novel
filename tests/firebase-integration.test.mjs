@@ -24,6 +24,9 @@ test('앱이 승인 후 Firebase Database에서 콘텐츠를 직접 읽는다', 
 
     assert.match(auth, /firebase-database\.js/);
     assert.match(auth, /novel\/content/);
+    // 승인된 학생의 권한은 Apps Script를 거치지 않고 자기 uid 노드에서 바로 읽습니다.
+    assert.match(auth, /novel\/accessByUid/);
+    assert.match(auth, /function readNovelAccessFromDatabase\(\)/);
     // 경로와 캐시 키에 소설 id가 들어가야 소설끼리 자료가 섞이지 않습니다.
     assert.match(auth, /function novelContentPath\(\)/);
     assert.match(auth, /readChapterIndex\(activeNovelId, kind\)/);

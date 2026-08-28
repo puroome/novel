@@ -3,6 +3,8 @@ import {
     describeChapter,
     formatDisplayChapterTitle,
     groupChaptersByCategory,
+    isChapterVisible,
+    parseChapterRanges,
     sortChaptersForDisplay
 } from './chapter-organization.js';
 import {
@@ -14,7 +16,7 @@ import {
 
 // 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
 // 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
-const APP_VERSION = '2026-08-26-wide-layout-4';
+const APP_VERSION = '2026-08-28-evidence-red';
 const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
 // 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
@@ -72,6 +74,10 @@ let allChapters = [];
 let currentChapterIndex = 0;
 let currentQuestionIndex = 0;
 let currentQuizBody = null;     // 지금 풀고 있는 퀴즈 챕터의 본문
+// 문제마다 고른 보기 번호입니다. 아직 고르지 않았으면 null입니다. '이전 문제'로
+// 돌아가면 이 기록을 보고 그때 고른 답과 해설을 그대로 되살립니다. 점수도 여기서
+// 다시 세므로, 같은 문제를 다시 지나가도 두 번 세지 않습니다.
+let answerSelections = [];
 let score = 0;
 let allWordChapters = [];       // 단어장(Word) 챕터 목록
 let currentWordChapterIndex = 0;
@@ -80,6 +86,12 @@ let loadAuthorizedChapter = null;
 let novelApi = null;          // auth.js가 넘겨준 소설 목록·선택 함수
 let selectableNovels = [];    // 이 학생이 볼 수 있는 소설만 추린 목록
 let activeNovel = null;
+// 이 학생에게 공개된 퀴즈 챕터. null이면 제한이 없습니다.
+let visibleQuizRanges = null;
+let hiddenQuizChapterCount = 0; // 공개 범위 밖이라 목록에서 뺀 챕터 수
+// 목록 화면을 먼저 띄우고 권한을 기다리므로, 기다리는 사이에 학생이 소설을 고를 수
+// 있습니다. 그때 뒤늦게 도착한 목록이 시작 화면을 덮지 않도록 순번을 매겨 둡니다.
+let novelPickerToken = 0;
 let chapterOpening = false;     // 챕터를 받는 동안 중복 선택을 막습니다.
 let appStarted = false;
 
@@ -95,6 +107,8 @@ function createHistoryState(screenId) {
         state.chapterIndex = currentChapterIndex;
         state.questionIndex = currentQuestionIndex;
         state.score = score;
+        // 뒤로가기로 돌아와도 이미 푼 문제는 푼 채로 보여야 합니다.
+        state.answers = [...answerSelections];
     } else if (screenId === 'word-screen') {
         state.chapterIndex = currentWordChapterIndex;
     }
@@ -178,7 +192,8 @@ async function restoreHistoryScreen(state) {
             await startChapter(Math.min(Math.max(chapterIndex, 0), allChapters.length - 1), {
                 historyMode: 'none',
                 questionIndex: state.questionIndex || 0,
-                score: Number.isInteger(state.score) ? state.score : 0
+                score: Number.isInteger(state.score) ? state.score : 0,
+                answers: state.answers
             });
             return;
         }
@@ -220,7 +235,13 @@ function requestChapter(mode, entry) {
 // 볼 수 있는 소설이 하나뿐이면 고르는 화면을 건너뜁니다.
 async function openNovelPicker({ historyMode = 'replace' } = {}) {
     const status = document.getElementById('novel-status');
-    status.innerText = '';
+    const token = ++novelPickerToken;
+
+    // 권한 목록은 Apps Script를 한 번 거치므로 첫 로그인에서는 눈에 띄게 걸립니다.
+    // 그동안 이전 화면을 그대로 두면 로그인 직후 엉뚱한 소설의 시작 화면이
+    // 잠깐 보였다가 목록으로 넘어갑니다. 기다리기 전에 목록 화면을 먼저 띄웁니다.
+    status.innerText = selectableNovels.length > 0 ? '' : '읽을 수 있는 소설을 확인하는 중입니다...';
+    showScreen('novel-screen', { historyMode: 'none' });
 
     const novels = novelApi?.listNovels?.() || [];
     let allowed = null;
@@ -231,6 +252,9 @@ async function openNovelPicker({ historyMode = 'replace' } = {}) {
         // Firebase 규칙이 지키고, 여기서 막으면 아무것도 못 보게 됩니다.
         console.warn('소설 접근 권한을 확인하지 못했습니다.', error);
     }
+
+    // 기다리는 사이에 학생이 이미 소설을 골랐다면 그 화면을 그대로 둡니다.
+    if (token !== novelPickerToken) return;
 
     // 배열이면 그대로 따릅니다. 빈 배열이면 볼 수 있는 소설이 없다는 뜻이므로
     // 목록도 비웁니다. null은 권한 정보를 아직 못 받은 경우라 가리지 않습니다.
@@ -244,7 +268,7 @@ async function openNovelPicker({ historyMode = 'replace' } = {}) {
         status.innerText = novels.length === 0
             ? '학습 자료가 아직 동기화되지 않았습니다. 선생님께 문의해 주세요.'
             : '읽을 수 있는 소설이 없습니다. 선생님께 문의해 주세요.';
-        showScreen('novel-screen', { historyMode });
+        showScreen('novel-screen', { historyMode, animate: false });
         return;
     }
 
@@ -253,8 +277,9 @@ async function openNovelPicker({ historyMode = 'replace' } = {}) {
         return;
     }
 
+    status.innerText = '';
     renderNovelList();
-    showScreen('novel-screen', { historyMode });
+    showScreen('novel-screen', { historyMode, animate: false });
 }
 
 function renderNovelList() {
@@ -280,6 +305,8 @@ function renderNovelList() {
 }
 
 async function chooseNovel(novel, { historyMode = 'push' } = {}) {
+    // 아직 답을 기다리고 있는 목록 화면이 있으면 여기서 무효로 만듭니다.
+    novelPickerToken++;
     const status = document.getElementById('novel-status');
     status.innerText = '자료를 준비하는 중입니다...';
 
@@ -294,11 +321,28 @@ async function chooseNovel(novel, { historyMode = 'push' } = {}) {
     activeNovel = novel;
     allChapters = [];
     allWordChapters = [];
+    hiddenQuizChapterCount = 0;
+    visibleQuizRanges = await loadQuizVisibility(novel.id);
     applyNovelToStartScreen(novel);
     status.innerText = '';
     document.getElementById('start-status').innerText = '';
     showScreen('start-screen', { historyMode });
     novelApi.prepareLibraryCache?.().catch(error => console.warn('자료 미리 받기 오류:', error));
+}
+
+/**
+ * 이 학생에게 공개된 퀴즈 챕터 범위를 받아 옵니다. 소설 목록을 받을 때 쓴 응답에
+ * 함께 들어 있으므로 여기서 다시 서버를 부르지는 않습니다. 확인하지 못했을 때는
+ * 소설 목록을 가리지 않는 것과 같은 판단으로 제한 없이 보여 줍니다.
+ */
+async function loadQuizVisibility(novelId) {
+    try {
+        const range = await novelApi?.getQuizChapterRange?.(novelId);
+        return parseChapterRanges(range ?? 'all');
+    } catch (error) {
+        console.warn('퀴즈 공개 범위를 확인하지 못했습니다.', error);
+        return null;
+    }
 }
 
 // 시작 화면 제목은 한 줄로 둡니다. 'When You Trap a Tiger'처럼 긴 제목은 기본
@@ -360,6 +404,12 @@ async function openLibrary(mode) {
         await requestChapterIndex(mode);
 
         if (mode === 'quiz') {
+            // 자료는 있는데 공개된 챕터가 없는 것은 오류가 아닙니다. 수업에서 함께
+            // 풀기 전까지는 이 상태가 정상이므로 붉은 글씨로 알리지 않습니다.
+            if (allChapters.length === 0 && hiddenQuizChapterCount > 0) {
+                statusText.innerText = '아직 공개된 퀴즈가 없습니다. 수업에서 함께 푼 뒤에 열립니다.';
+                return;
+            }
             if (allChapters.length === 0) {
                 throw new Error('Firebase에 동기화된 퀴즈 자료가 없습니다.');
             }
@@ -395,8 +445,23 @@ async function openLibrary(mode) {
 function applyChapterIndex(result) {
     if (!result || !Array.isArray(result.entries) || result.entries.length === 0) return;
 
-    if (result.kind === 'word') allWordChapters = sortChaptersForDisplay(result.entries);
-    else allChapters = sortChaptersForDisplay(result.entries);
+    if (result.kind === 'word') {
+        allWordChapters = sortChaptersForDisplay(result.entries);
+        return;
+    }
+
+    // 퀴즈는 수업에서 함께 푸는 것이라, 선생님이 공개한 챕터만 목록에 올립니다.
+    // 어휘는 가리지 않습니다.
+    const visible = result.entries.filter(entry => isChapterVisible(visibleQuizRanges, chapterNumberOf(entry)));
+    hiddenQuizChapterCount = result.entries.length - visible.length;
+    allChapters = sortChaptersForDisplay(visible);
+}
+
+// 공개 범위는 시트의 chapter_no로 적습니다. 목록에 그 값이 없으면 제목에서
+// 읽어 내고, 그것도 없으면 공개된 것으로 보지 않습니다.
+function chapterNumberOf(entry) {
+    const chapterNo = Number.parseInt(entry?.chapterNo, 10);
+    return Number.isInteger(chapterNo) ? chapterNo : describeChapter(entry).chapterNumber;
 }
 
 function describeLoadError(error, mode) {
@@ -459,7 +524,9 @@ function renderExplanation(text) {
 function renderQuestionExplanation(question) {
     if (!question?.evidence) return renderExplanation(question?.explanation || '해설이 제공되지 않았습니다.');
 
-    const evidence = `<span class="block my-3 px-4 py-3 rounded-lg bg-white border border-gray-300 border-l-4 border-l-blue-400 text-gray-600 font-normal leading-relaxed"${ttsTextAttribute(question.evidence)}>${escapeHtml(question.evidence)}</span>`;
+    // 근거 원문에서 정답을 가리키는 대목은 `[RED: ]`로 감싸 굵게 보여 줍니다.
+    // 읽어 줄 때는 그 표시를 뺍니다.
+    const evidence = `<span class="block my-3 px-4 py-3 rounded-lg bg-white border border-gray-300 border-l-4 border-l-blue-400 text-gray-600 font-normal leading-relaxed"${ttsTextAttribute(sentenceTextForSpeech(question.evidence))}>${renderMarkedText(question.evidence)}</span>`;
     const explanation = question.explanation
         ? `<span class="block">${escapeHtml(question.explanation)}</span>`
         : '';
@@ -774,7 +841,13 @@ function splitCategoryLabel(category) {
 }
 
 // --- [6단계] 퀴즈 실행 로직 ---
-async function startChapter(index, { historyMode = 'push', questionIndex = 0, score: restoredScore = 0 } = {}) {
+async function startChapter(index, {
+    historyMode = 'push',
+    questionIndex = 0,
+    score: restoredScore = 0,
+    answers = null,
+    atLastQuestion = false
+} = {}) {
     const entry = allChapters[index];
     if (!entry) return;
 
@@ -784,12 +857,41 @@ async function startChapter(index, { historyMode = 'push', questionIndex = 0, sc
 
     currentQuizBody = chapter;
     currentChapterIndex = index;
-    currentQuestionIndex = Math.min(Math.max(questionIndex, 0), questions.length - 1);
-    score = restoredScore;
+    // 앞 챕터로 거슬러 올라올 때는 마지막 문제부터 엽니다. 문항 수는 본문을 받아야
+    // 알 수 있어서 부르는 쪽에서 번호를 미리 셀 수 없습니다.
+    currentQuestionIndex = atLastQuestion
+        ? questions.length - 1
+        : Math.min(Math.max(questionIndex, 0), questions.length - 1);
+    answerSelections = restoreAnswerSelections(questions.length, answers);
+    // 답안 기록이 있으면 점수는 거기서 다시 셉니다. 기록이 없는 예전 히스토리
+    // 항목에서 돌아온 경우에만 그때 적어 둔 점수를 그대로 씁니다.
+    score = Array.isArray(answers) ? countCorrectAnswers() : restoredScore;
 
     document.getElementById('current-chapter-title').innerText = formatChapterListLabel(entry.title, index);
     showScreen('quiz-screen', { historyMode });
     loadQuestion({ syncHistory: historyMode !== 'none' });
+}
+
+// 뒤로가기로 돌아왔을 때 히스토리에 적힌 답안을 되살립니다. 문항 수가 달라졌거나
+// 값이 깨져 있으면 그 문항만 아직 안 푼 것으로 둡니다.
+function restoreAnswerSelections(questionCount, answers) {
+    const selections = new Array(questionCount).fill(null);
+    if (!Array.isArray(answers)) return selections;
+
+    answers.slice(0, questionCount).forEach((value, index) => {
+        if (Number.isInteger(value)) selections[index] = value;
+    });
+    return selections;
+}
+
+// 점수는 더해 가지 않고 답안 기록에서 매번 다시 셉니다. '이전 문제'로 같은 문제를
+// 두 번 지나가도 점수가 두 번 오르지 않습니다.
+function countCorrectAnswers() {
+    const questions = currentQuizBody?.questions || [];
+    return answerSelections.reduce((total, selected, index) => {
+        const answerIndex = questions[index]?.answerIndex;
+        return total + (Number.isInteger(answerIndex) && selected === answerIndex ? 1 : 0);
+    }, 0);
 }
 
 function loadQuestion({ syncHistory = true } = {}) {
@@ -810,14 +912,15 @@ function loadQuestion({ syncHistory = true } = {}) {
         optionsContainer.appendChild(btn);
     });
 
-    // 답을 고르기 전에는 넓은 화면에서도 한 열입니다. 규칙은 index.html에 있습니다.
+    // 앞뒤로 오갈 때는 이미 푼 문제라도 해설을 되살리지 않습니다. 언제 열어도
+    // '문제만 나온 상태'로 시작합니다. 넓은 화면에서도 이때는 한 열입니다.
     document.getElementById('app-container').dataset.quizAnswered = 'false';
 
     const expBox = document.getElementById('explanation-box');
     expBox.classList.add('hidden');
     expBox.classList.remove('bg-green-50', 'bg-red-50', 'bg-amber-50', 'border',
         'border-green-200', 'border-red-200', 'border-amber-200');
-    document.getElementById('next-btn').classList.add('hidden');
+    updateQuestionNavigation();
 
     if (syncHistory && window.history.state?.app === HISTORY_MARKER) {
         saveScreenToHistory('quiz-screen', 'replace');
@@ -825,6 +928,18 @@ function loadQuestion({ syncHistory = true } = {}) {
 }
 
 function selectOption(selectedIndex, buttonElement) {
+    answerSelections[currentQuestionIndex] = selectedIndex;
+    revealAnswer(selectedIndex, buttonElement);
+    score = countCorrectAnswers();
+
+    // 이전 문제로 갔다가 돌아와도 방금 고른 답이 남아 있도록 적어 둡니다.
+    if (window.history.state?.app === HISTORY_MARKER) {
+        saveScreenToHistory('quiz-screen', 'replace');
+    }
+}
+
+// 고른 답에 따라 보기를 잠그고 해설을 펼칩니다. 점수는 여기서 건드리지 않습니다.
+function revealAnswer(selectedIndex, buttonElement) {
     const chapter = currentQuizBody;
     const qData = chapter.questions[currentQuestionIndex];
     const optionsContainer = document.getElementById('options-container');
@@ -850,7 +965,6 @@ function selectOption(selectedIndex, buttonElement) {
         buttonElement.classList.add('border-green-500', 'bg-green-50', 'text-green-800');
         expBox.classList.add('bg-green-50', 'border', 'border-green-200');
         expText.innerHTML = `<span class="block font-bold text-green-700 mb-2">✅ CORRECT</span>${renderQuestionExplanation(qData)}`;
-        score++;
     } else {
         buttonElement.classList.remove('border-gray-200', 'bg-gray-50', 'opacity-50');
         buttonElement.classList.add('border-red-500', 'bg-red-50', 'text-red-800');
@@ -866,11 +980,6 @@ function selectOption(selectedIndex, buttonElement) {
     // 넓은 화면에서는 이 순간부터 해설이 문제 오른쪽으로 붙습니다.
     document.getElementById('app-container').dataset.quizAnswered = 'true';
 
-    const nextBtn = document.getElementById('next-btn');
-    nextBtn.classList.remove('hidden');
-    nextBtn.innerText = currentQuestionIndex === chapter.questions.length - 1
-        ? '결과 보기 ➔'
-        : '다음 문제 ➔';
 }
 
 function nextQuestion() {
@@ -882,6 +991,33 @@ function nextQuestion() {
     } else {
         showResult();
     }
+}
+
+// 함께 푼 퀴즈를 되짚어 보기 위한 버튼입니다. 푼 문제만 오가는 것이 아니라 **무조건
+// 바로 앞 문제**로 갑니다. 챕터의 첫 문제에서는 앞 챕터의 마지막 문제로 넘어갑니다.
+// 3장 1번에서 누르면 2장 마지막 문제가 열립니다.
+function previousQuestion() {
+    if (currentQuestionIndex > 0) {
+        currentQuestionIndex--;
+        loadQuestion();
+        return;
+    }
+
+    // 목록에서 앞 챕터란 '공개된 챕터 가운데 바로 앞'입니다. 가려 둔 챕터로는
+    // 넘어가지 않습니다.
+    if (currentChapterIndex <= 0) return;
+
+    const prevButton = document.getElementById('prev-btn');
+    openChapter(() => startChapter(currentChapterIndex - 1, { atLastQuestion: true }), prevButton);
+}
+
+// 앞뒤 버튼은 답을 고르지 않아도 늘 쓸 수 있습니다. 문제를 건너뛰며 훑어볼 수
+// 있어야 하기 때문입니다. 맨 첫 챕터의 첫 문제에서만 뒤로 갈 곳이 없습니다.
+function updateQuestionNavigation() {
+    document.getElementById('prev-btn').disabled = currentQuestionIndex <= 0 && currentChapterIndex <= 0;
+
+    const lastQuestion = currentQuestionIndex === currentQuizBody.questions.length - 1;
+    document.getElementById('next-btn').innerText = lastQuestion ? '결과 보기 ➔' : '다음 문제 ➔';
 }
 
 function showResult() {
@@ -945,6 +1081,7 @@ export function startReadingApp(api) {
     document.getElementById('start-btn').addEventListener('click', startQuiz);
     document.getElementById('word-btn').addEventListener('click', startWords);
     document.getElementById('quiz-back-btn').addEventListener('click', goToChapters);
+    document.getElementById('prev-btn').addEventListener('click', previousQuestion);
     document.getElementById('next-btn').addEventListener('click', nextQuestion);
     document.getElementById('word-prev-btn').addEventListener('click', () => moveWordChapter(-1));
     document.getElementById('word-next-btn').addEventListener('click', () => moveWordChapter(1));
@@ -969,6 +1106,9 @@ export function startReadingApp(api) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 배포가 실제로 반영됐는지 한눈에 보이게 합니다. 느리다는 이야기가 나올 때
+    // 옛 파일을 보고 있는 것은 아닌지부터 가릅니다.
+    console.info(`[Novel] 앱 버전 ${APP_VERSION}`);
     // 로그인과 나란히 확인합니다. 새 버전 때문에 새로고침하더라도 로그인을 두 번
     // 기다리지 않습니다.
     ensureLatestApp();

@@ -30,13 +30,16 @@ const FIREBASE_CONTENT_PATH = 'novel/content';
 // 소설 목록은 content 아래에 둡니다. 보안 규칙이 content를 이미 승인된 사용자에게만
 // 열어 두고 있어, 규칙을 건드리지 않고 목록을 읽을 수 있습니다.
 const FIREBASE_NOVELS_PATH = `${FIREBASE_CONTENT_PATH}/novels`;
+// 소설별 권한과 퀴즈 공개 범위는 '허용 명단 동기화'가 여기에 올려 둡니다.
+// 보안 규칙이 자기 uid 노드만 읽게 열어 주면 Apps Script를 거칠 필요가 없습니다.
+const FIREBASE_ACCESS_PATH = 'novel/accessByUid';
 const LIBRARY_KINDS = ['quiz', 'word'];
 
 // 지금 보고 있는 소설. 소설을 고를 때마다 바뀌고, 모든 경로와 캐시 키에 들어갑니다.
 let activeNovelId = null;
 let availableNovels = [];
-let allowedNovelIdsPromise = null;
-const ALLOWED_NOVELS_CACHE_KEY = 'novel-app-allowed-novels';
+let novelAccessPromise = null;
+const NOVEL_ACCESS_CACHE_KEY = 'novel-app-novel-access';
 
 function novelContentPath() {
     if (!activeNovelId) throw new Error('소설이 선택되지 않았습니다.');
@@ -125,7 +128,8 @@ function revealApp(startReadingApp) {
         prepareLibraryCache,
         listNovels,
         selectNovel,
-        getAllowedNovelIds
+        getAllowedNovelIds,
+        getQuizChapterRange
     });
 }
 
@@ -384,6 +388,7 @@ function resetLibraryState() {
 // 목록을 읽어 냈다는 것 자체가 승인된 사용자라는 뜻이고, 느린 Apps Script를 거칠
 // 이유가 없습니다. 버전 구독은 소설을 고른 뒤에 시작합니다.
 async function subscribeAsApprovedUser() {
+    const started = performance.now();
     try {
         await ensureDatabase();
         // 규칙이 막고 있으므로 이 읽기가 통과했다는 것 자체가 승인의 증거입니다.
@@ -394,6 +399,7 @@ async function subscribeAsApprovedUser() {
         if (availableNovels.length === 0) {
             console.warn('소설 목록이 비어 있습니다. 시트에서 학습 자료 동기화를 실행해 주세요.');
         }
+        console.info(`[Novel] 로그인 확인과 소설 목록 읽기 (${Math.round(performance.now() - started)}ms).`);
         return true;
     } catch (error) {
         console.warn('소설 목록을 읽지 못했습니다.', error);
@@ -438,44 +444,153 @@ function listNovels() {
 }
 
 /**
- * 이 학생이 볼 수 있는 소설 id 목록입니다. Apps Script가 AllowedUsers의 소설별
- * 열을 읽어 돌려줍니다. 로그인 한 번에 한 번만 물어보고 세션에 적어 둡니다.
+ * 이 학생의 소설별 권한입니다. Apps Script가 AllowedUsers의 소설 열과
+ * '{소설 id}_test' 열을 한 번에 읽어 돌려줍니다. 로그인 한 번에 한 번만
+ * 물어보고 세션에 적어 둡니다.
  */
-function getAllowedNovelIds() {
-    if (allowedNovelIdsPromise) return allowedNovelIdsPromise;
+function getNovelAccess() {
+    if (novelAccessPromise) return novelAccessPromise;
 
-    allowedNovelIdsPromise = (async () => {
-        const cached = readAllowedNovelsCache();
+    novelAccessPromise = (async () => {
+        // 이미 열려 있는 Firebase 연결로 곧장 읽습니다. Apps Script는 리다이렉트와
+        // 콜드 스타트를 거친 뒤 토큰 검증·명단 읽기·기록 쓰기를 차례로 하느라
+        // 몇 초씩 걸립니다. 소설 목록이 늦게 뜨던 것이 이것 때문이었습니다.
+        const direct = await readNovelAccessFromDatabase();
+        // 읽기가 워낙 빨라 세션에 적어 두지 않습니다. 그래서 시트를 다시 동기화하면
+        // 탭을 새로 열지 않고 새로고침만 해도 반영됩니다.
+        if (direct) return direct;
+
+        const cached = readNovelAccessCache();
         if (cached) return cached;
 
         const response = await callScript('session');
         // 배열이 아니면 '아직 권한 정보가 없다'는 뜻입니다. 빈 배열과 다릅니다.
-        const ids = Array.isArray(response?.user?.novels) ? response.user.novels : null;
-        if (ids) writeAllowedNovelsCache(ids);
-        return ids;
+        const novels = Array.isArray(response?.user?.novels) ? response.user.novels : null;
+        const ranges = response?.user?.quizChapters;
+        // Apps Script는 코드가 두 벌로 돕니다. 시트 메뉴의 동기화는 편집기에 저장된
+        // 코드가, 이 session 요청은 배포된 코드가 처리합니다. 붙여넣고 저장만 하면
+        // 동기화는 성공하는데 응답에는 공개 범위가 빠져, 퀴즈가 전부 열린 채로
+        // 조용히 지나갑니다. 그 상태를 눈에 띄게 알려 둡니다.
+        if (novels && !ranges) {
+            console.warn(
+                '[Novel] 배포된 Apps Script가 예전 버전입니다 — 응답에 퀴즈 공개 범위가 없습니다.\n'
+                + 'Apps Script에서 배포 → 배포 관리 → 연필 → 버전 "새 버전" → 배포를 실행하세요.\n'
+                + '그때까지는 모든 챕터의 퀴즈가 보입니다.'
+            );
+        }
+        const access = {
+            novels,
+            quizChapters: ranges && typeof ranges === 'object' ? ranges : {}
+        };
+        if (novels) writeNovelAccessCache(access);
+        return access;
     })();
 
-    allowedNovelIdsPromise.catch(() => {
-        allowedNovelIdsPromise = null;
+    novelAccessPromise.catch(() => {
+        novelAccessPromise = null;
     });
-    return allowedNovelIdsPromise;
+    return novelAccessPromise;
 }
 
-function readAllowedNovelsCache() {
+/**
+ * 내 권한 기록을 Firebase에서 바로 읽습니다. 규칙을 아직 넓히지 않았거나 기록이
+ * 없으면 null을 돌려주고, 부르는 쪽이 예전처럼 Apps Script로 넘어갑니다.
+ */
+async function readNovelAccessFromDatabase() {
+    const uid = auth?.currentUser?.uid;
+    if (!uid) return null;
+
+    // 이 길이 막히면 앱은 예전 Apps Script 길로 되돌아가고, 목록이 뜨기까지 몇 초
+    // 걸립니다. 조용히 넘어가면 왜 느린지 알 수 없으므로 이유를 하나씩 밝힙니다.
+    const fallback = reason => {
+        console.warn(`[Novel] 권한을 Firebase에서 바로 읽지 못했습니다 — ${reason}\n`
+            + 'Apps Script로 확인합니다. 소설 목록이 뜨기까지 몇 초 걸립니다.');
+        return null;
+    };
+
     try {
-        const raw = globalThis.sessionStorage?.getItem(ALLOWED_NOVELS_CACHE_KEY);
+        await ensureDatabase();
+        const started = performance.now();
+        const snapshot = await get(ref(database, `${FIREBASE_ACCESS_PATH}/${uid}`));
+        const elapsed = Math.round(performance.now() - started);
+
+        if (!snapshot.exists()) {
+            return fallback(`내 권한 기록(accessByUid/${uid})이 없습니다. `
+                + "시트에서 '허용 명단 동기화'를 실행하세요.");
+        }
+
+        const record = snapshot.val();
+        if (!record || typeof record !== 'object') {
+            return fallback('권한 기록의 형태가 올바르지 않습니다.');
+        }
+
+        // quizChapters가 없으면 예전 Code.gs로 동기화한 기록입니다. 공개 범위를
+        // 모른 채 전부 열면 공개 전 퀴즈가 새어 나가므로 Apps Script에 물어봅니다.
+        const quizChapters = record.quizChapters;
+        if (!quizChapters || typeof quizChapters !== 'object') {
+            return fallback('권한 기록에 퀴즈 공개 범위가 없습니다. '
+                + "새 Code.gs를 붙여넣고 '허용 명단 동기화'를 다시 실행하세요.");
+        }
+
+        const novels = record.novels && typeof record.novels === 'object' ? record.novels : {};
+        console.info(`[Novel] 권한을 Firebase에서 바로 읽었습니다 (${elapsed}ms).`);
+        return {
+            novels: Object.keys(novels).filter(id => novels[id] === true),
+            quizChapters
+        };
+    } catch (error) {
+        // 보안 규칙이 accessByUid를 아직 막고 있으면 여기로 옵니다.
+        return fallback(`읽기가 거부되었습니다 (${error?.message || error}). `
+            + '보안 규칙에 accessByUid 항목을 넣었는지 확인하세요.');
+    }
+}
+
+/** 볼 수 있는 소설 id 목록. null이면 권한 정보를 아직 받지 못했다는 뜻입니다. */
+async function getAllowedNovelIds() {
+    return (await getNovelAccess()).novels;
+}
+
+/**
+ * 이 학생에게 공개된 퀴즈 챕터 범위입니다. 'all'이면 제한이 없고, 빈 문자열이면
+ * 아직 아무 챕터도 공개하지 않았다는 뜻입니다. 권한 정보를 받지 못했을 때는
+ * 예전처럼 모두 보여 줍니다 — 소설 목록을 가리지 않는 것과 같은 판단입니다.
+ */
+async function getQuizChapterRange(novelId) {
+    const { novels, quizChapters } = await getNovelAccess();
+    if (!novels) return 'all';
+
+    const range = quizChapters?.[novelId];
+    return typeof range === 'string' ? range : 'all';
+}
+
+function readNovelAccessCache() {
+    try {
+        const raw = globalThis.sessionStorage?.getItem(NOVEL_ACCESS_CACHE_KEY);
         const parsed = raw ? JSON.parse(raw) : null;
-        return Array.isArray(parsed) ? parsed : null;
+        return parsed && Array.isArray(parsed.novels) ? parsed : null;
     } catch (error) {
         return null;
     }
 }
 
-function writeAllowedNovelsCache(ids) {
+/**
+ * 로그아웃할 때 권한 기록을 지웁니다. 교실 컴퓨터 한 대를 여러 학생이 번갈아 쓰므로,
+ * 남겨 두면 다음 학생이 앞 학생의 소설 목록과 퀴즈 공개 범위를 그대로 물려받습니다.
+ */
+function clearNovelAccess() {
+    novelAccessPromise = null;
     try {
-        globalThis.sessionStorage?.setItem(ALLOWED_NOVELS_CACHE_KEY, JSON.stringify(ids));
+        globalThis.sessionStorage?.removeItem(NOVEL_ACCESS_CACHE_KEY);
     } catch (error) {
-        // 저장에 실패해도 목록은 이미 손에 있으므로 그냥 넘어갑니다.
+        // 저장소를 막아 둔 브라우저라면 애초에 남은 것도 없습니다.
+    }
+}
+
+function writeNovelAccessCache(access) {
+    try {
+        globalThis.sessionStorage?.setItem(NOVEL_ACCESS_CACHE_KEY, JSON.stringify(access));
+    } catch (error) {
+        // 저장에 실패해도 권한은 이미 손에 있으므로 그냥 넘어갑니다.
     }
 }
 
@@ -576,6 +691,7 @@ export function initializeNovelAuth({ startReadingApp }) {
     onAuthStateChanged(auth, async user => {
         if (!user) {
             resetLibraryState();
+            clearNovelAccess();
             getElement('app-container').classList.add('hidden');
             getElement('login-screen').classList.remove('hidden');
             showLoginIntro();

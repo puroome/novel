@@ -247,7 +247,7 @@
             </div>
         </div>
 
-        <div id="start-screen" class="relative flex flex-1 flex-col items-center justify-center py-6 text-center">
+        <div id="start-screen" class="relative hidden flex flex-1 flex-col items-center justify-center py-6 text-center">
             <div class="absolute right-0 top-0 flex gap-2">
                 <button id="novel-back-btn" aria-label="다른 소설 고르기" title="다른 소설 고르기" class="hidden h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 hover:shadow-md">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
@@ -346,8 +346,13 @@
                     <p id="explanation-text" class="text-gray-700 font-medium"></p>
                 </div>
 
-                <div class="mt-8 text-right">
-                    <button id="next-btn" class="hidden bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200">
+                <!-- 앞뒤 버튼은 답을 고르기 전에도 보입니다. 함께 푼 퀴즈를 되짚어
+                     보려면 지금 문제를 풀지 않고도 오갈 수 있어야 합니다. -->
+                <div class="mt-8 flex items-center justify-between">
+                    <button id="prev-btn" class="bg-gray-100 text-gray-700 hover:bg-blue-50 font-bold py-2 px-6 rounded-lg transition duration-200 disabled:opacity-30 disabled:cursor-not-allowed">
+                        ⬅ 이전 문제
+                    </button>
+                    <button id="next-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200">
                         다음 문제 ➔
                     </button>
                 </div>

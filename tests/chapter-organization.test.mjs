@@ -4,6 +4,8 @@ import {
     describeChapter,
     formatDisplayChapterTitle,
     groupChaptersByCategory,
+    isChapterVisible,
+    parseChapterRanges,
     sortChaptersForDisplay
 } from '../js/chapter-organization.js';
 
@@ -59,4 +61,34 @@ test('파트가 없는 소설은 한 묶음으로 모인다', () => {
     assert.equal(groups.length, 1);
     assert.equal(groups[0].category, 'When You Trap a Tiger');
     assert.equal(groups[0].entries.length, 2);
+});
+
+// 퀴즈는 수업에서 함께 푸는 것이라, AllowedUsers의 '{소설 id}_test' 열에 적은
+// 챕터만 목록에 나옵니다. 빈칸이 '전부 공개'로 새면 안 되므로 여기서 못 박아 둡니다.
+test('공개 범위를 적지 않으면 퀴즈 챕터가 하나도 보이지 않는다', () => {
+    ['', '   ', null, undefined].forEach(value => {
+        const ranges = parseChapterRanges(value);
+        assert.deepEqual(ranges, []);
+        assert.equal(isChapterVisible(ranges, 1), false);
+    });
+
+    // 해석할 수 없는 값도 마찬가지입니다. 넓게 여는 쪽으로 넘어가면 안 됩니다.
+    assert.equal(isChapterVisible(parseChapterRanges('열 장까지'), 1), false);
+});
+
+test('공개 범위 안의 챕터만 보인다', () => {
+    const ranges = parseChapterRanges('1-10, 15');
+
+    assert.equal(isChapterVisible(ranges, 1), true);
+    assert.equal(isChapterVisible(ranges, 10), true);
+    assert.equal(isChapterVisible(ranges, 11), false);
+    assert.equal(isChapterVisible(ranges, 15), true);
+    // 챕터 번호를 모르는 항목은 공개된 것으로 보지 않습니다.
+    assert.equal(isChapterVisible(ranges, null), false);
+});
+
+test("all은 제한 없음을 뜻한다", () => {
+    assert.equal(parseChapterRanges('all'), null);
+    assert.equal(parseChapterRanges('ALL'), null);
+    assert.equal(isChapterVisible(null, 123), true);
 });

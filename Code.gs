@@ -8,6 +8,15 @@ function sheetNameFor(novelId, kind) {
   return `${novelId}_${kind}`;
 }
 
+// AllowedUsers에서 학생마다 '어느 챕터의 퀴즈까지 보이는가'를 적는 열입니다.
+// 소설 열 이름 뒤에 이 꼬리를 붙입니다. 예: wonder -> wonder_test
+// 퀴즈는 수업에서 함께 푸는 것이라 미리 열어 두지 않고, 푼 범위만 복습하도록
+// 하나씩 넓혀 갑니다.
+const QUIZ_RANGE_COLUMN_SUFFIX = '_test';
+// 칸이 비어 있으면 '아직 아무것도 공개하지 않았다'는 뜻입니다. 모두 열려면
+// 이 값을 적어야 합니다.
+const QUIZ_RANGE_ALL = 'all';
+
 const FIREBASE_ROOT_PATH = 'novel';
 const FIREBASE_ALLOWED_USERS_PATH = `${FIREBASE_ROOT_PATH}/allowedUsers`;
 const FIREBASE_CONTENT_PATH = `${FIREBASE_ROOT_PATH}/content`;
@@ -20,12 +29,14 @@ const NOVELS_CONTENT_KEY = 'novels';
 const NOVEL_SHEET_ID = '1ttEBEw7Vs59p7zCy4IaHK3JsDxPj34GNr82pFNCmcS4';
 const FIREBASE_WEB_API_KEY = 'AIzaSyCafyN3HAOqJSt41ZgZj8AF5GvkMW6z-ZE';
 
+// page 열은 없습니다. 학생이 보는 실물 책은 출판사마다 쪽번호가 달라 원서 epub의
+// 쪽수가 아무 데도 맞지 않습니다. 앱도 이 값을 화면에 쓴 적이 없습니다.
 const WORD_HEADERS = [
   'part_title', 'chapter_no', 'chapter_title', 'word', 'meaning',
-  'relative', 'collocation', 'sentence', 'page',
+  'relative', 'collocation', 'sentence',
 ];
 const BACKGROUND_HEADERS = [
-  'part_title', 'chapter_no', 'chapter_title', 'eng', 'kor', 'remark',
+  'chapter_no', 'chapter_title', 'eng', 'kor', 'remark',
 ];
 const QUIZ_HEADERS = [
   'chapter_no', 'chapter_title', 'question_no', 'question',
@@ -308,6 +319,9 @@ function toClientUser(email, user) {
     edit: Boolean(user?.edit),
     // 앱은 이 목록에 있는 소설만 시작 화면에 보여 줍니다.
     novels: allowedNovelIds(user),
+    // 소설마다 '1-10'처럼 공개된 퀴즈 챕터 범위입니다. 빈 문자열이면 하나도
+    // 보이지 않고, 'all'이면 제한이 없습니다.
+    quizChapters: allowedQuizChapters(user),
   };
 }
 
@@ -316,6 +330,17 @@ function allowedNovelIds(user) {
   const novels = user?.novels;
   if (!novels || typeof novels !== 'object') return [];
   return Object.keys(novels).filter(id => novels[id] === true);
+}
+
+/** 볼 수 있는 소설의 퀴즈 공개 범위만 추립니다. */
+function allowedQuizChapters(user) {
+  const ranges = user?.quizChapters;
+  const result = {};
+  if (!ranges || typeof ranges !== 'object') return result;
+  allowedNovelIds(user).forEach(id => {
+    result[id] = String(ranges[id] || '');
+  });
+  return result;
 }
 
 function requestAccess(account, name, grade) {
@@ -385,6 +410,58 @@ function readNovelPermissions(row, columns, rowNumber, permission, novels) {
   return result;
 }
 
+/**
+ * AllowedUsers의 '{소설 id}_test' 열을 읽어 공개된 퀴즈 챕터 범위를 돌려줍니다.
+ * 칸이 비어 있으면 하나도 공개하지 않습니다.
+ *
+ * 열이 없으면 오류로 멈춥니다. 예전에는 '제한 없음'으로 넘겼는데, 열 이름을
+ * 잘못 적거나 새 소설에 열을 빠뜨렸을 때 아무 말 없이 퀴즈가 전부 열려 버렸습니다.
+ * 공개 전 퀴즈가 새어 나가는 쪽이 훨씬 나쁘므로 여기서 붙잡습니다.
+ */
+function readNovelQuizRanges(row, columns, rowNumber, permission, novels) {
+  const result = {};
+  novels.forEach(novel => {
+    const header = `${novel.id}${QUIZ_RANGE_COLUMN_SUFFIX}`;
+    const column = columns[header];
+    if (column === undefined) {
+      throw new Error(
+        `${ALLOWED_USERS_SHEET_NAME} 시트에 '${header}' 열이 없습니다. `
+        + `novels 시트의 id마다 '{id}${QUIZ_RANGE_COLUMN_SUFFIX}' 열을 만들고, `
+        + `공개할 챕터를 '1-10'처럼 적으세요. 비워 두면 그 학생에게 퀴즈가 보이지 않고, `
+        + `'${QUIZ_RANGE_ALL}'이면 모두 보입니다.`
+      );
+    }
+    result[novel.id] = permission ? parseChapterRange(row[column], header, rowNumber) : '';
+  });
+  return result;
+}
+
+/**
+ * '1-10', '1-10, 15', '3'처럼 적은 범위를 '1-10,15-15' 꼴로 다듬습니다.
+ * 빈 값은 빈 문자열, all과 *는 제한 없음을 뜻합니다.
+ */
+function parseChapterRange(value, header, rowNumber) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^(all|\*)$/i.test(text)) return QUIZ_RANGE_ALL;
+
+  return text.split(',').map(segment => segment.trim()).filter(Boolean).map(segment => {
+    const match = segment.match(/^(\d+)\s*(?:[-~]\s*(\d+))?$/);
+    if (!match) {
+      throw new Error(
+        `${rowNumber}행의 ${header}에는 '1-10'처럼 챕터 번호를 입력하세요. `
+        + '비워 두면 퀴즈가 보이지 않고, all이면 모두 보입니다.'
+      );
+    }
+    const from = Number(match[1]);
+    const to = match[2] === undefined ? from : Number(match[2]);
+    if (from < 1 || to < from) {
+      throw new Error(`${rowNumber}행의 ${header} 범위가 올바르지 않습니다: ${segment}`);
+    }
+    return `${from}-${to}`;
+  }).join(',');
+}
+
 function buildAccessByUid(users, identities, updatedAt) {
   const accessByUid = {};
   Object.entries(identities || {}).forEach(([emailKey, identity]) => {
@@ -397,6 +474,7 @@ function buildAccessByUid(users, identities, updatedAt) {
       // 지금은 앱 화면에서만 소설을 가리지만, 보안 규칙을 소설별로 켤 때
       // 이 값을 그대로 쓰면 Apps Script를 다시 고치지 않아도 됩니다.
       novels: user.novels || {},
+      quizChapters: user.quizChapters || {},
       updatedAt,
     };
   });
@@ -472,14 +550,23 @@ function buildNovelContent(novel) {
       note: '',
       derivatives: parseLabeledEntries(row.relative),
       collocations: splitSemicolonText(row.collocation),
-      page: row.page,
     });
   });
 
   backgroundRows.forEach(row => {
+    // bg 시트에는 part_title 열이 없습니다. 어휘가 하나도 없는 챕터는 없으므로,
+    // 같은 chapter_no의 word 행이 등록해 둔 파트 이름을 그대로 물려받습니다.
+    const chapterNo = parsePositiveInteger(row.chapter_no, row, BACKGROUND_SHEET_NAME, 'chapter_no');
+    if (!wordChapterMetadata.has(chapterNo)) {
+      throw sheetRowError(
+        row,
+        BACKGROUND_SHEET_NAME,
+        `Chapter ${chapterNo}가 '${WORD_SHEET_NAME}'에 없습니다. 배경지식은 어휘가 있는 챕터에만 넣을 수 있습니다.`
+      );
+    }
     const chapter = getOrCreateWordChapter(
       wordChapterMap,
-      registerChapter(row, BACKGROUND_SHEET_NAME, wordChapterMetadata, true)
+      registerChapter(row, BACKGROUND_SHEET_NAME, wordChapterMetadata, false)
     );
     const duplicateKey = `${chapter.chapterNo}\n${row.eng.toLowerCase()}`;
     assertUniqueRow(backgroundKeys, duplicateKey, row, BACKGROUND_SHEET_NAME, '같은 챕터에 중복된 eng가 있습니다.');
@@ -497,7 +584,7 @@ function buildNovelContent(novel) {
 
   quizRows.forEach(row => {
     const metadata = registerChapter(row, QUIZ_SHEET_NAME, quizChapterMetadata, false);
-    // quiz 시트에는 part_title 열이 없습니다. 같은 챕터의 word/bg 행에서 물려받습니다.
+    // quiz 시트에도 part_title 열이 없습니다. 같은 챕터의 word 행에서 물려받습니다.
     if (!metadata.partTitle) {
       metadata.partTitle = wordChapterMetadata.get(metadata.chapterNo)?.partTitle || '';
     }
@@ -618,7 +705,7 @@ function registerChapter(row, sheetName, chapterMetadata, requiresPartTitle) {
   const chapterNo = parsePositiveInteger(row.chapter_no, row, sheetName, 'chapter_no');
   const chapterTitle = row.chapter_title;
   // 파트 구성은 소설마다 다릅니다. 챕터 번호로 계산하지 않고 시트 값을 그대로 씁니다.
-  // quiz 시트에는 part_title 열이 없어, 같은 챕터의 word/bg 행에서 채워집니다.
+  // part_title은 word 시트에만 있습니다. bg·quiz 시트는 같은 챕터의 word 행에서 채웁니다.
   const partTitle = requiresPartTitle ? row.part_title : '';
   const existing = chapterMetadata.get(chapterNo);
 
@@ -802,6 +889,9 @@ function readAllowedUsers() {
       edit,
       // 소설별 접근 권한. Permission=no면 소설 열이 yes여도 모두 막습니다.
       novels: readNovelPermissions(row, columns, rowNumber, permission, novels),
+      // 소설별로 공개한 퀴즈 챕터 범위. 소설을 볼 수 있어도 여기 없는 챕터의
+      // 퀴즈는 목록에 나오지 않습니다.
+      quizChapters: readNovelQuizRanges(row, columns, rowNumber, permission, novels),
       updatedAt: new Date().toISOString(),
     };
   });

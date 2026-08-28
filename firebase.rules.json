@@ -5,6 +5,11 @@
     "novel": {
       "content": {
         ".read": "auth != null && root.child('novel').child('accessByUid').child(auth.uid).child('permission').val() === true"
+      },
+      "accessByUid": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid"
+        }
       }
     }
   }
