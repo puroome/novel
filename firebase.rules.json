@@ -6,6 +6,11 @@
       "content": {
         ".read": "auth != null && root.child('novel').child('accessByUid').child(auth.uid).child('permission').val() === true"
       },
+      "text": {
+        "$novelId": {
+          ".read": "auth != null && root.child('novel').child('accessByUid').child(auth.uid).child('novels').child($novelId).val() === true"
+        }
+      },
       "accessByUid": {
         "$uid": {
           ".read": "auth != null && auth.uid === $uid"

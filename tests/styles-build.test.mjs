@@ -4,7 +4,12 @@ import test from 'node:test';
 
 // index.html의 <style> 블록과 group처럼 표시용으로만 쓰는 클래스는 Tailwind가 만들지
 // 않습니다. 여기에 적힌 것만 예외로 봅니다.
-const NON_UTILITY_CLASSES = new Set(['fade-in', 'group']);
+// text-flip-*은 원문 책장 넘김에 쓰는 것으로, 규칙이 index.html의 <style>에 있습니다.
+const NON_UTILITY_CLASSES = new Set([
+    'fade-in', 'group',
+    'text-flip-overlay', 'text-flip-window', 'text-flip-leaf',
+    'text-flip-face', 'text-flip-face-back', 'text-flip-clone'
+]);
 
 function escapeForSelector(className) {
     return className.replace(/[!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/g, '\\$&');

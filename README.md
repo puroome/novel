@@ -96,6 +96,50 @@ Google Sheets (소설마다 word / bg / quiz)
 - `evidence`: 정답 확인 뒤 기존 원문 근거 박스에 표시됩니다.
 - `part_title` 열은 없습니다. 같은 `chapter_no`의 `{id}_word` 행에서 물려받습니다.
 
+## 원문 (`novel/text`)
+
+소설 원문은 **시트를 거치지 않습니다.** 한 번 올리면 고칠 일이 없어서, 시트가 주는
+'고칠 수 있다'는 이점이 없고 산문을 셀에 붙여넣는 위험만 남기 때문입니다.
+
+원문은 **`novel/content` 바깥**인 `novel/text`에 둡니다. `학습 자료 동기화`가
+`novel/content`를 통째로 PUT으로 갈아 끼우므로, 안에 두면 다음 동기화 때 사라집니다.
+
+```text
+novel/text/{소설 id}/version          내용에서 뽑은 값. 바뀌지 않으면 다시 안 받습니다
+novel/text/{소설 id}/index            [{chapterNo, title, partTitle, paragraphCount}]
+novel/text/{소설 id}/chapters/{위치}   {chapterNo, title, paragraphs: [...]}
+```
+
+### 올리는 순서
+
+1. epub에서 챕터별 텍스트를 뽑습니다(`novel-data/tools/extract.py`). 이미 뽑아 둔
+   소설은 건너뜁니다.
+2. 앱이 읽는 JSON으로 만듭니다.
+
+   ```bash
+   python novel-data/tools/build_text.py wonder --text novel-data/wonder/text --out novel-data/wonder/text.json
+   ```
+
+   제목은 파일 첫 줄이 `Part One: August | Ordinary` 꼴이면 거기서 읽고, 없으면
+   `--titles`로 준 TSV(`part_title`/`chapter_no`/`chapter_title`)에서 읽습니다.
+   `[p.12]` 쪽 표시는 지웁니다. 실물 책은 출판사마다 쪽번호가 달라 맞지 않습니다.
+3. Firebase에 올립니다. **비밀키는 환경 변수로 줍니다.**
+
+   ```bash
+   python novel-data/tools/upload_text.py wonder --json novel-data/wonder/text.json
+   ```
+
+   `--dry`를 붙이면 무엇을 올릴지만 보여 줍니다.
+
+### 보안 규칙
+
+`novel/text/$novelId`는 **그 소설이 허용된 학생만** 읽습니다
+(`accessByUid/$uid/novels/$novelId`). `novel/content`가 승인된 사용자 모두에게
+열려 있는 것과 다릅니다. 원서 전문이라 더 좁게 잡았습니다.
+
+> 원문이 안 보이면 **`허용 명단 동기화`를 먼저 실행하세요.** 그 값이 없으면
+> 규칙이 막습니다. 잠기는 쪽으로 실패하도록 일부러 그렇게 두었습니다.
+
 ## Apps Script 설정
 
 새 스프레드시트에서 **확장 프로그램 → Apps Script**를 열고 `Code.gs` 내용을 붙여 넣습니다.

@@ -34,8 +34,18 @@ function normalizeQuizChapter(chapter) {
     };
 }
 
+// 원문은 문단 배열 하나뿐입니다. 중간이 빈 배열로 올라와도 denseArray가 메웁니다.
+function normalizeTextChapter(chapter) {
+    return {
+        ...chapter,
+        paragraphs: denseArray(chapter?.paragraphs).map(paragraph => String(paragraph))
+    };
+}
+
 export function normalizeFirebaseChapter(kind, chapter) {
-    return kind === 'word' ? normalizeWordChapter(chapter) : normalizeQuizChapter(chapter);
+    if (kind === 'word') return normalizeWordChapter(chapter);
+    if (kind === 'text') return normalizeTextChapter(chapter);
+    return normalizeQuizChapter(chapter);
 }
 
 export function normalizeFirebaseChapters(kind, chapters) {

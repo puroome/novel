@@ -39,12 +39,16 @@
         }
         #chapter-screen,
         #word-chapter-screen,
-        #word-screen {
+        #word-screen,
+        #text-chapter-screen,
+        #text-screen {
             overflow: hidden;
         }
         #chapter-screen:not(.hidden),
         #word-chapter-screen:not(.hidden),
         #word-screen:not(.hidden),
+        #text-chapter-screen:not(.hidden),
+        #text-screen:not(.hidden),
         #quiz-screen:not(.hidden),
         #result-screen:not(.hidden) {
             display: flex;
@@ -53,7 +57,9 @@
         }
         #chapter-list,
         #word-chapter-list,
-        #word-list {
+        #word-list,
+        #text-chapter-list,
+        #text-body {
             flex: 1 1 0%;
             min-height: 0;
             overflow-y: auto;
@@ -69,6 +75,71 @@
             -webkit-user-select: text;
             user-select: text;
         }
+        /* 원문 글자 크기는 + - 버튼이 1px씩 조절합니다. 값은 app.js가 넣습니다. */
+        #text-body {
+            font-size: var(--text-body-size, 16px);
+            /* 책처럼 양쪽 맞춤으로 봅니다. 맞춤만 하면 단어 사이가 들쭉날쭉해지므로
+               (좁은 2단에서 특히 심합니다) 하이픈도 함께 켭니다. 하이픈이 영어 규칙을
+               따르도록 이 칸에만 lang="en"을 달아 두었습니다. */
+            text-align: justify;
+            -webkit-hyphens: auto;
+            hyphens: auto;
+        }
+        /* 다음 챕터 버튼은 문단이 아니므로 가운데 그대로 둡니다. */
+        #text-next-btn {
+            text-align: center;
+            -webkit-hyphens: none;
+            hyphens: none;
+        }
+
+        /* 책장 넘김. 오른쪽 면이 가운데 축을 중심으로 넘어가고, 그 뒷면이 왼쪽에
+           내려앉습니다. 넘어가는 동안 밑에는 이미 다음 쪽이 깔려 있습니다.
+           클래스 이름은 Tailwind가 만든 것이 아니라 app.js가 직접 붙입니다. */
+        .text-flip-overlay {
+            position: fixed;
+            z-index: 40;
+            pointer-events: none;
+            perspective: 2200px;
+        }
+        .text-flip-window,
+        .text-flip-face {
+            position: absolute;
+            top: 0;
+            overflow: hidden;
+            background: #ffffff;
+        }
+        .text-flip-leaf {
+            position: absolute;
+            top: 0;
+            transform-style: preserve-3d;
+            transition: transform 520ms cubic-bezier(0.4, 0.05, 0.35, 1);
+        }
+        .text-flip-face {
+            left: 0;
+            right: 0;
+            bottom: 0;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            box-shadow: 0 0 24px rgba(15, 23, 42, 0.18);
+        }
+        .text-flip-face-back {
+            transform: rotateY(180deg);
+        }
+        .text-flip-clone {
+            position: absolute;
+            top: 0;
+        }
+        /* 넘어가는 종이에 그림자를 얹어 두께가 느껴지게 합니다. */
+        .text-flip-shade {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .text-flip-leaf {
+                transition: none;
+            }
+        }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -83,13 +154,33 @@
         @media (min-width: 1024px) {
             #app-container[data-screen="chapter-screen"],
             #app-container[data-screen="word-chapter-screen"],
+            #app-container[data-screen="text-chapter-screen"],
+            #app-container[data-screen="text-screen"],
             #app-container[data-screen="word-screen"] {
                 max-width: 72rem;
+            }
+
+            /* 가로가 넓으면 원문을 책처럼 두 단으로 봅니다. 한 단을 화면 높이에 맞추고
+               (column-fill: auto) 넘치는 만큼 오른쪽으로 이어 붙이므로, 읽는 순서가
+               왼쪽 칸 → 오른쪽 칸이 됩니다. 한 단을 통째로 아래까지 읽고 다시 위로
+               올라가는 일이 없습니다. 다음 쪽은 가로로 넘깁니다. */
+            #text-body {
+                column-count: 2;
+                column-gap: 3rem;
+                column-fill: auto;
+                height: 100%;
+                /* 스크롤바를 두지 않습니다. 이북 리더기처럼 쪽 단위로만 넘깁니다.
+                   overflow:hidden이어도 코드에서 scrollLeft로 옮기는 것은 됩니다. */
+                overflow: hidden;
+                padding-right: 0;
+                /* 단 사이 세로줄. 두 단임을 한눈에 알아보게 합니다. */
+                column-rule: 1px solid #e5e7eb;
             }
 
             /* 파트 헤더는 가로 전체를 쓰고 그 안의 챕터 버튼만 두 열로 나눕니다.
                접어 둔 파트(.hidden)까지 grid로 만들면 다시 펼쳐지므로 제외합니다. */
             #chapter-list [data-chapter-panel]:not(.hidden),
+            #text-chapter-list [data-chapter-panel]:not(.hidden),
             #word-chapter-list [data-chapter-panel]:not(.hidden) {
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -106,6 +197,7 @@
                글자는 늘어나지 않고 위에서부터 붙은 채 아래 여백만 생깁니다. */
             #chapter-list [data-chapter-panel]:not(.hidden),
             #word-chapter-list [data-chapter-panel]:not(.hidden),
+            #text-chapter-list [data-chapter-panel]:not(.hidden),
             #word-list {
                 align-items: stretch;
             }
@@ -163,6 +255,7 @@
                첫 줄 왼쪽 칸만 위로 밀리므로 지우고 gap으로 대신합니다. */
             #chapter-list [data-chapter-panel] > * + *,
             #word-chapter-list [data-chapter-panel] > * + *,
+            #text-chapter-list [data-chapter-panel] > * + *,
             #word-list > * + * {
                 margin-top: 0;
             }
@@ -173,12 +266,14 @@
         @media (min-width: 1536px) {
             #app-container[data-screen="chapter-screen"],
             #app-container[data-screen="word-chapter-screen"],
+            #app-container[data-screen="text-chapter-screen"],
             #app-container[data-screen="word-screen"] {
                 max-width: 100rem;
             }
 
             #chapter-list [data-chapter-panel]:not(.hidden),
             #word-chapter-list [data-chapter-panel]:not(.hidden),
+            #text-chapter-list [data-chapter-panel]:not(.hidden),
             #word-list {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
             }
@@ -276,15 +371,25 @@
                 <!-- 제목 길이에 따라 글자 크기를 applyNovelToStartScreen()이 조절합니다. -->
                 <h1 id="start-title" class="whitespace-nowrap text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">WONDER</h1>
 
-                <div class="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-                    <button id="word-btn" class="group inline-flex items-center justify-center gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-red-300 hover:bg-red-100 hover:shadow-lg">
-                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-600 text-xl text-white shadow-md">Aa</span>
-                        <span class="text-lg font-bold">Word</span>
-                    </button>
-                    <button id="start-btn" class="group inline-flex items-center justify-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-blue-300 hover:bg-blue-100 hover:shadow-lg">
-                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-xl text-white shadow-md">Q</span>
-                        <span class="text-lg font-bold">Quiz</span>
-                    </button>
+                <!-- 바깥을 inline-flex로 두면 폭이 위 두 버튼 줄에 맞춰집니다.
+                     그래서 아래 Text 버튼의 w-full이 '두 버튼을 합친 너비'가 됩니다. -->
+                <div class="mt-8 flex justify-center">
+                    <div class="inline-flex flex-col gap-3">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                            <button id="word-btn" class="group inline-flex items-center justify-center gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-red-300 hover:bg-red-100 hover:shadow-lg">
+                                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-600 text-xl text-white shadow-md">Aa</span>
+                                <span class="text-lg font-bold">Word</span>
+                            </button>
+                            <button id="start-btn" class="group inline-flex items-center justify-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-blue-300 hover:bg-blue-100 hover:shadow-lg">
+                                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-xl text-white shadow-md">Q</span>
+                                <span class="text-lg font-bold">Quiz</span>
+                            </button>
+                        </div>
+                        <button id="text-btn" class="group inline-flex w-full items-center justify-center gap-3 rounded-2xl border border-green-100 bg-green-50 p-4 text-green-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-green-300 hover:bg-green-100 hover:shadow-lg">
+                            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-600 text-xl text-white shadow-md">T</span>
+                            <span class="text-lg font-bold">Reading Text</span>
+                        </button>
+                    </div>
                 </div>
 
                 <p class="mt-5 min-h-[1.25rem] text-sm text-slate-400" id="start-status"></p>
@@ -414,6 +519,62 @@
                     ←
                 </button>
                 <button id="word-next-btn" aria-label="Next chapter" title="Next chapter" class="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-red-200 text-red-700 text-2xl font-bold hover:border-red-500 hover:bg-red-50 transition duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-red-200 disabled:hover:bg-transparent">
+                    →
+                </button>
+            </div>
+        </div>
+
+        <div id="text-chapter-screen" class="hidden flex flex-1 min-h-0 flex-col">
+            <div class="flex items-center gap-3 mb-3">
+                <button data-action="go-start" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-green-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
+                    </svg>
+                </button>
+                <h2 class="flex-1 text-2xl font-bold text-green-700 text-center pr-12">SELECT A CHAPTER</h2>
+            </div>
+            <div id="text-chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-2"></div>
+        </div>
+
+        <div id="text-screen" class="hidden flex flex-1 min-h-0 flex-col">
+            <div class="flex justify-between items-center gap-3 mb-3 border-b pb-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <button data-action="go-start" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-slate-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
+                        </svg>
+                    </button>
+                    <button data-action="go-text-chapters" aria-label="원문 챕터 목록으로 돌아가기" title="원문 챕터 목록으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-green-600 text-white shadow-md hover:bg-green-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5 12 3l9 8.5"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 10v10a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V10"/>
+                        </svg>
+                    </button>
+                    <h2 id="text-chapter-title" class="text-xl font-bold text-green-700 truncate">챕터 제목</h2>
+                </div>
+                <!-- 글자 크기는 1px씩 오르내립니다. 고른 크기는 기기에 남습니다. -->
+                <div class="flex shrink-0 items-center gap-1">
+                    <button id="text-smaller-btn" aria-label="글자 작게" title="글자 작게" class="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-green-200 text-green-700 text-xl font-bold transition duration-200 hover:border-green-500 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed">
+                        −
+                    </button>
+                    <span id="text-font-size" class="w-9 text-center text-sm font-medium text-gray-500">16</span>
+                    <button id="text-larger-btn" aria-label="글자 크게" title="글자 크게" class="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-green-200 text-green-700 text-xl font-bold transition duration-200 hover:border-green-500 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed">
+                        +
+                    </button>
+                </div>
+            </div>
+
+            <div id="text-body" lang="en" class="flex-1 min-h-0 space-y-4 overflow-y-auto pr-2 leading-relaxed text-gray-800"></div>
+
+            <!-- 두 단으로 볼 때만 나옵니다. 한 단일 때는 그냥 세로로 넘깁니다. -->
+            <div id="text-pager" class="mt-3 hidden items-center justify-between gap-3">
+                <button id="text-prev-page" aria-label="이전 쪽" title="이전 쪽" class="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-green-200 text-green-700 text-2xl font-bold hover:border-green-500 hover:bg-green-50 transition duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-green-200 disabled:hover:bg-transparent">
+                    ←
+                </button>
+                <span id="text-page-count" class="text-sm font-medium text-gray-500">1 / 1</span>
+                <button id="text-next-page" aria-label="다음 쪽" title="다음 쪽" class="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-green-200 text-green-700 text-2xl font-bold hover:border-green-500 hover:bg-green-50 transition duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-green-200 disabled:hover:bg-transparent">
                     →
                 </button>
             </div>

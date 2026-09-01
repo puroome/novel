@@ -113,11 +113,12 @@ test('앱은 챕터 목록을 먼저 받고 고른 챕터만 따로 받는다', 
 test('Firebase에서 받은 자료를 두 번 정규화하지 않는다', async () => {
     const auth = await readFile(new URL('../js/auth.js', import.meta.url), 'utf8');
 
-    // 전체를 받을 때 1번, 챕터 하나를 받을 때 1번. 그 밖에는 없어야 합니다.
+    // 전체를 받을 때 1번, 챕터 하나를 받을 때 1번, 원문 챕터를 받을 때 1번.
+    // 모두 Firebase에서 막 받은 자리이고, 기기 기록에서 꺼낸 자료는 그대로 씁니다.
     const bulkCalls = auth.match(/normalizeFirebaseChapters\(/g) || [];
     const singleCalls = auth.match(/normalizeFirebaseChapter\(/g) || [];
     assert.equal(bulkCalls.length, 1, `전체 정규화가 ${bulkCalls.length}번 호출됩니다.`);
-    assert.equal(singleCalls.length, 1, `챕터 정규화가 ${singleCalls.length}번 호출됩니다.`);
+    assert.equal(singleCalls.length, 2, `챕터 정규화가 ${singleCalls.length}번 호출됩니다.`);
     // 캐시에서 꺼낸 자료를 다시 정규화하던 createLibrary는 사라졌습니다.
     assert.doesNotMatch(auth, /function createLibrary/);
 });

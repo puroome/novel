@@ -9,8 +9,12 @@ const LEGACY_CACHE_PREFIX = 'novel-firebase-library-cache-v2';
 
 let databasePromise = null;
 
+// 원문(text)은 novel/content가 아니라 novel/text에서 오지만, 기기에 담는 방식은
+// 같습니다. 여기에 넣어 두지 않으면 quiz로 접혀 퀴즈 기록을 덮어씁니다.
+const KNOWN_KINDS = new Set(['word', 'quiz', 'text']);
+
 function normalizeKind(kind) {
-    return kind === 'word' ? 'word' : 'quiz';
+    return KNOWN_KINDS.has(kind) ? kind : 'quiz';
 }
 
 // 소설마다 자료가 따로 있으므로 키에 소설 id를 넣습니다. 넣지 않으면 두 번째

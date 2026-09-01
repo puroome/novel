@@ -33,6 +33,9 @@ const FIREBASE_NOVELS_PATH = `${FIREBASE_CONTENT_PATH}/novels`;
 // 소설별 권한과 퀴즈 공개 범위는 '허용 명단 동기화'가 여기에 올려 둡니다.
 // 보안 규칙이 자기 uid 노드만 읽게 열어 주면 Apps Script를 거칠 필요가 없습니다.
 const FIREBASE_ACCESS_PATH = 'novel/accessByUid';
+// 원문은 novel/content 밖에 둡니다. 시트 동기화가 content를 통째로 PUT으로 갈아
+// 끼우기 때문에, 안에 두면 다음 동기화 때 조용히 사라집니다.
+const FIREBASE_TEXT_PATH = 'novel/text';
 const LIBRARY_KINDS = ['quiz', 'word'];
 
 // 지금 보고 있는 소설. 소설을 고를 때마다 바뀌고, 모든 경로와 캐시 키에 들어갑니다.
@@ -44,6 +47,11 @@ const NOVEL_ACCESS_CACHE_KEY = 'novel-app-novel-access';
 function novelContentPath() {
     if (!activeNovelId) throw new Error('소설이 선택되지 않았습니다.');
     return `${FIREBASE_CONTENT_PATH}/${activeNovelId}`;
+}
+
+function novelTextPath() {
+    if (!activeNovelId) throw new Error('소설이 선택되지 않았습니다.');
+    return `${FIREBASE_TEXT_PATH}/${activeNovelId}`;
 }
 
 let firebaseApp = null;
@@ -62,6 +70,9 @@ const chapterRequests = new Map();
 // 검색처럼 챕터 본문을 통째로 훑어야 하는 요청입니다. 종류마다 하나만 돕니다.
 const allChapterRequests = new Map();
 const backgroundFilled = new Set();
+// 원문 요청. 어휘·퀴즈와 달리 버전 구독이 없어 따로 둡니다.
+let textIndexRequest = null;
+const textChapterRequests = new Map();
 
 function getElement(id) {
     return document.getElementById(id);
@@ -128,6 +139,8 @@ function revealApp(startReadingApp) {
         loadChapterIndex,
         loadChapter,
         loadAllChapters,
+        loadTextIndex,
+        loadTextChapter,
         prepareLibraryCache,
         listNovels,
         selectNovel,
@@ -360,6 +373,73 @@ async function fetchAllChapters(kind) {
     return chapters;
 }
 
+// --- 원문 ---
+// 원문은 한 번 올리면 고칠 일이 없습니다. 그래서 어휘·퀴즈처럼 버전을 구독하지 않고,
+// 목록을 받을 때 version 값을 한 번 읽어 기기에 담아 둔 것과 맞춰만 봅니다. 값이
+// 그대로면 두 번 다시 내려받지 않습니다.
+function loadTextIndex() {
+    if (textIndexRequest) return textIndexRequest;
+
+    const request = resolveTextIndex();
+    textIndexRequest = request;
+    request.catch(() => {
+        if (textIndexRequest === request) textIndexRequest = null;
+    });
+    return request;
+}
+
+async function resolveTextIndex() {
+    const novelId = activeNovelId;
+    const path = novelTextPath();
+
+    const versionSnapshot = await get(ref(database, `${path}/version`));
+    const version = versionSnapshot.exists() ? String(versionSnapshot.val()) : '';
+    if (!version) {
+        throw new Error('이 소설의 원문이 아직 올라가지 않았습니다.');
+    }
+
+    const cached = await readChapterIndex(novelId, 'text');
+    if (cached?.version === version) return { kind: 'text', version, entries: cached.index };
+    if (cached) await clearLibraryCache(novelId, 'text');
+
+    const snapshot = await get(ref(database, `${path}/index`));
+    const entries = snapshot.exists() ? withPositions(normalizeFirebaseIndex(snapshot.val())) : [];
+    if (entries.length === 0) {
+        throw new Error('Firebase에 원문 목록이 없습니다.');
+    }
+
+    await saveChapterIndex(novelId, 'text', { version, index: entries });
+    return { kind: 'text', version, entries };
+}
+
+function loadTextChapter(position) {
+    const pending = textChapterRequests.get(position);
+    if (pending) return pending;
+
+    const request = resolveTextChapter(position);
+    textChapterRequests.set(position, request);
+    request.catch(() => {
+        if (textChapterRequests.get(position) === request) textChapterRequests.delete(position);
+    });
+    return request;
+}
+
+async function resolveTextChapter(position) {
+    const { version } = await loadTextIndex();
+
+    const cached = await readCachedChapter(activeNovelId, 'text', position, version);
+    if (cached) return cached;
+
+    const snapshot = await get(ref(database, `${novelTextPath()}/chapters/${position}`));
+    if (!snapshot.exists()) {
+        throw new Error('선택한 챕터의 원문을 찾지 못했습니다.');
+    }
+
+    const chapter = normalizeFirebaseChapter('text', snapshot.val());
+    await saveCachedChapter(activeNovelId, 'text', position, { version, chapter });
+    return chapter;
+}
+
 // 목록은 바로 받아 두고, 본문은 한가할 때 한 번에 받아 둡니다. 챕터를 하나씩
 // 113번 요청하는 것보다 훨씬 싸고, 다음 실행부터는 네트워크를 쓰지 않습니다.
 function prepareLibraryCache() {
@@ -416,6 +496,8 @@ function resetLibraryState() {
     chapterRequests.clear();
     allChapterRequests.clear();
     backgroundFilled.clear();
+    textIndexRequest = null;
+    textChapterRequests.clear();
 }
 
 // 콘텐츠 읽기 권한은 firebase.rules.json의 규칙이 이미 막고 있습니다. 그래서 소설

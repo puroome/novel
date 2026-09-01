@@ -16,7 +16,7 @@ import {
 
 // 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
 // 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
-const APP_VERSION = '2026-09-01-word-search';
+const APP_VERSION = '2026-09-01-reading-text';
 const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
 // 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
@@ -81,9 +81,13 @@ let answerSelections = [];
 let score = 0;
 let allWordChapters = [];       // 단어장(Word) 챕터 목록
 let currentWordChapterIndex = 0;
+let allTextChapters = [];       // 원문(Text) 챕터 목록
+let currentTextChapterIndex = 0;
 let loadAuthorizedIndex = null;
 let loadAuthorizedChapter = null;
 let loadAuthorizedAllChapters = null;
+let loadAuthorizedTextIndex = null;
+let loadAuthorizedTextChapter = null;
 // 어휘 검색 상태입니다. 검색 중이 아니면 둘 다 비어 있습니다.
 // wordSearchMatches는 '챕터 position → 매칭된 카드 번호 배열'이고, 이 지도에 없는
 // 챕터는 목록에서 빠집니다.
@@ -103,7 +107,9 @@ let appStarted = false;
 
 // --- [1단계] 화면 전환 로직 ---
 const SCREEN_IDS = ['novel-screen', 'start-screen', 'chapter-screen', 'quiz-screen', 'result-screen',
-                    'word-chapter-screen', 'word-screen'];
+                    'word-chapter-screen', 'word-screen', 'text-chapter-screen', 'text-screen'];
+const WORD_SCREENS = ['word-chapter-screen', 'word-screen'];
+const TEXT_SCREENS = ['text-chapter-screen', 'text-screen'];
 const HISTORY_MARKER = 'wonder-app';
 
 function createHistoryState(screenId) {
@@ -117,6 +123,8 @@ function createHistoryState(screenId) {
         state.answers = [...answerSelections];
     } else if (screenId === 'word-screen') {
         state.chapterIndex = currentWordChapterIndex;
+    } else if (screenId === 'text-screen') {
+        state.chapterIndex = currentTextChapterIndex;
     }
 
     return state;
@@ -161,11 +169,15 @@ async function restoreHistoryScreen(state) {
         return;
     }
 
-    const needsWordLibrary = state.screenId === 'word-chapter-screen' || state.screenId === 'word-screen';
-    const libraryMissing = needsWordLibrary ? allWordChapters.length === 0 : allChapters.length === 0;
+    const needsWordLibrary = WORD_SCREENS.includes(state.screenId);
+    const needsTextLibrary = TEXT_SCREENS.includes(state.screenId);
+    const libraryMissing = needsTextLibrary
+        ? allTextChapters.length === 0
+        : needsWordLibrary ? allWordChapters.length === 0 : allChapters.length === 0;
     if (state.screenId !== 'start-screen' && libraryMissing) {
         try {
-            await requestChapterIndex(needsWordLibrary ? 'word' : 'quiz');
+            if (needsTextLibrary) await requestTextIndex();
+            else await requestChapterIndex(needsWordLibrary ? 'word' : 'quiz');
         } catch (error) {
             console.error('이전 화면 복원 오류:', error);
             showScreen('start-screen', { historyMode: 'none' });
@@ -185,11 +197,23 @@ async function restoreHistoryScreen(state) {
         return;
     }
 
+    if (state.screenId === 'text-chapter-screen') {
+        renderTextChapterList();
+        showScreen('text-chapter-screen', { historyMode: 'none' });
+        return;
+    }
+
     // 본문을 다시 받아야 하므로 실패할 수 있습니다. 뒤로가기가 조용히 깨지지 않게 감쌉니다.
     try {
         if (state.screenId === 'word-screen') {
             const index = Number.isInteger(state.chapterIndex) ? state.chapterIndex : 0;
             await startWordChapter(Math.min(Math.max(index, 0), allWordChapters.length - 1), { historyMode: 'none' });
+            return;
+        }
+
+        if (state.screenId === 'text-screen') {
+            const index = Number.isInteger(state.chapterIndex) ? state.chapterIndex : 0;
+            await startTextChapter(Math.min(Math.max(index, 0), allTextChapters.length - 1), { historyMode: 'none' });
             return;
         }
 
@@ -235,6 +259,22 @@ async function requestChapterIndex(mode) {
 function requestChapter(mode, entry) {
     if (!loadAuthorizedChapter) return Promise.reject(new Error('로그인 정보가 준비되지 않았습니다.'));
     return loadAuthorizedChapter(mode, entry.position);
+}
+
+// 원문 목록입니다. 어휘·퀴즈와 달리 novel/text에서 옵니다.
+async function requestTextIndex() {
+    if (!loadAuthorizedTextIndex) throw new Error('로그인 정보가 준비되지 않았습니다.');
+
+    const result = await loadAuthorizedTextIndex();
+    if (result && Array.isArray(result.entries) && result.entries.length > 0) {
+        allTextChapters = sortChaptersForDisplay(result.entries);
+    }
+    return result;
+}
+
+function requestTextChapter(entry) {
+    if (!loadAuthorizedTextChapter) return Promise.reject(new Error('로그인 정보가 준비되지 않았습니다.'));
+    return loadAuthorizedTextChapter(entry.position);
 }
 
 // 검색은 챕터 본문을 모두 훑어야 하므로 한 번에 받아 옵니다. 미리 받아 둔 것이
@@ -334,6 +374,7 @@ async function chooseNovel(novel, { historyMode = 'push' } = {}) {
     activeNovel = novel;
     allChapters = [];
     allWordChapters = [];
+    allTextChapters = [];
     hiddenQuizChapterCount = 0;
     // 검색 결과는 그 소설의 챕터 자리를 가리키므로 소설을 바꾸면 버립니다.
     clearWordSearchState();
@@ -400,9 +441,16 @@ function applyNovelToStartScreen(novel) {
 // --- 'Quiz' / 'Word' 버튼 ---
 function startQuiz() { return openLibrary('quiz'); }
 function startWords() { return openLibrary('word'); }
+function startTexts() { return openLibrary('text'); }
+
+const LIBRARY_LABELS = { quiz: '퀴즈', word: '어휘', text: '원문' };
 
 async function openLibrary(mode) {
-    const buttons = [document.getElementById('start-btn'), document.getElementById('word-btn')];
+    const buttons = [
+        document.getElementById('start-btn'),
+        document.getElementById('word-btn'),
+        document.getElementById('text-btn')
+    ];
     const statusText = document.getElementById('start-status');
     const loadNote = document.getElementById('start-load-note');
 
@@ -412,10 +460,22 @@ async function openLibrary(mode) {
     });
     statusText.classList.remove('text-red-600');
     statusText.classList.add('text-gray-500');
-    statusText.innerText = mode === 'quiz' ? '퀴즈를 불러오는 중입니다...' : '어휘를 불러오는 중입니다...';
+    statusText.innerText = `${LIBRARY_LABELS[mode]}을(를) 불러오는 중입니다...`;
     loadNote.classList.remove('hidden');
 
     try {
+        // 원문은 novel/text에서 따로 옵니다. 한 번 올리면 바뀌지 않아 버전 구독이 없습니다.
+        if (mode === 'text') {
+            await requestTextIndex();
+            if (allTextChapters.length === 0) {
+                throw new Error('Firebase에 올라간 원문이 없습니다.');
+            }
+            statusText.innerText = '';
+            renderTextChapterList();
+            showScreen('text-chapter-screen');
+            return;
+        }
+
         // 버전은 Firebase 구독으로 계속 최신이라, 방금 동기화한 자료도 그대로 반영됩니다.
         await requestChapterIndex(mode);
 
@@ -481,7 +541,7 @@ function chapterNumberOf(entry) {
 }
 
 function describeLoadError(error, mode) {
-    const what = mode === 'word' ? '어휘' : '퀴즈';
+    const what = LIBRARY_LABELS[mode] || '자료';
     if (location.protocol === 'file:') {
         return `HTML 파일을 더블클릭해서 열면 로그인과 Firebase 연결이 막힙니다. 웹 주소(https://)로 접속해 주세요.`;
     }
@@ -498,7 +558,12 @@ function goToWordChapters() {
     showScreen('word-chapter-screen');
 }
 
-// 챕터 선택 화면의 홈 아이콘: 맨 첫 화면(Quiz / Word)으로 갑니다.
+// 원문을 읽던 중에 챕터 선택 화면으로 돌아갑니다.
+function goToTextChapters() {
+    showScreen('text-chapter-screen');
+}
+
+// 챕터 선택 화면의 홈 아이콘: 맨 첫 화면(Quiz / Word / Text)으로 갑니다.
 function goToStart() {
     closeContinueModal();
     document.getElementById('start-status').innerText = '';
@@ -928,6 +993,347 @@ function handleWordChapterArrowKeys(event) {
     }
 }
 
+// --- 원문 읽기 ---
+// 글자 크기는 1px씩 오르내립니다. 학생마다 눈이 다르고 기기도 달라서, 고른 값을
+// 그 기기에 남겨 둡니다. 소설이나 챕터가 바뀌어도 그대로 씁니다.
+const TEXT_FONT_KEY = 'novel-app-text-font-size';
+const TEXT_FONT_MIN = 12;
+const TEXT_FONT_MAX = 32;
+const TEXT_FONT_DEFAULT = 16;
+
+function clampFontSize(value) {
+    return Math.min(Math.max(value, TEXT_FONT_MIN), TEXT_FONT_MAX);
+}
+
+function readStoredFontSize() {
+    try {
+        const stored = Number.parseInt(globalThis.localStorage?.getItem(TEXT_FONT_KEY) ?? '', 10);
+        return Number.isInteger(stored) ? clampFontSize(stored) : TEXT_FONT_DEFAULT;
+    } catch (error) {
+        // 저장소를 막아 둔 브라우저에서도 읽기는 됩니다. 기본 크기로 시작합니다.
+        return TEXT_FONT_DEFAULT;
+    }
+}
+
+let textFontSize = readStoredFontSize();
+
+function applyTextFontSize() {
+    document.getElementById('text-body').style.setProperty('--text-body-size', `${textFontSize}px`);
+    document.getElementById('text-font-size').innerText = textFontSize;
+    document.getElementById('text-smaller-btn').disabled = textFontSize <= TEXT_FONT_MIN;
+    document.getElementById('text-larger-btn').disabled = textFontSize >= TEXT_FONT_MAX;
+}
+
+function changeTextFontSize(step) {
+    const next = clampFontSize(textFontSize + step);
+    if (next === textFontSize) return;
+
+    textFontSize = next;
+    try {
+        globalThis.localStorage?.setItem(TEXT_FONT_KEY, String(next));
+    } catch (error) {
+        // 저장이 막혀 있어도 이번 세션에서는 바꾼 크기로 읽을 수 있습니다.
+    }
+    applyTextFontSize();
+    // 글자가 커지면 단이 다시 짜여 쪽 수가 달라집니다. 어중간한 자리에 걸치지 않게
+    // 첫 쪽으로 되돌리고 다시 셉니다.
+    document.getElementById('text-body').scrollLeft = 0;
+    updateTextPager(1);
+}
+
+// 넓은 화면에서는 원문이 두 단이 되고, 이북 리더기처럼 **쪽 단위로 넘깁니다.**
+// 스크롤바는 두지 않습니다(CSS에서 overflow:hidden). 옮기는 일은 모두 여기서 합니다.
+//
+// 한 쪽은 두 단이고 그 폭은 clientWidth + column-gap입니다. 단 하나만큼만 옮기면
+// 단 경계가 어긋나므로 반드시 이 폭의 배수로만 옮깁니다.
+function textPageWidth(body) {
+    const gap = Number.parseFloat(getComputedStyle(body).columnGap);
+    return body.clientWidth + (Number.isFinite(gap) ? gap : 0);
+}
+
+// 두 단으로 펼쳐졌는지. 한 단일 때는 예전처럼 세로로 넘기므로 아래 처리를 모두 건너뜁니다.
+function textIsPaged(body) {
+    return body.scrollWidth > body.clientWidth + 1;
+}
+
+function textPageCount(body) {
+    const width = textPageWidth(body);
+    if (width <= 0) return 1;
+    const gap = width - body.clientWidth;
+    return Math.max(1, Math.ceil((body.scrollWidth + gap) / width));
+}
+
+function textCurrentPage(body) {
+    const width = textPageWidth(body);
+    if (width <= 0) return 1;
+    return Math.min(textPageCount(body), Math.round(body.scrollLeft / width) + 1);
+}
+
+const TEXT_FLIP_MS = 520;
+let textFlipping = false;
+
+function prefersReducedMotion() {
+    return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+}
+
+// 본문을 한 벌 더 그려 놓고 원하는 자리만 잘라서 보여 줍니다. 넘어가는 종이의 앞뒤
+// 면을 만들 때 씁니다.
+//
+// 본문 자체를 통째로 복제합니다. 클래스를 그대로 물려받아야 문단 사이 간격(space-y-4)
+// 같은 것이 살아 있습니다. 처음에는 자식만 옮겼다가 문단이 다 붙어 버렸습니다.
+// 다만 단 나누기·글자 크기는 `#text-body` id 규칙에만 걸려 있어 복제본에는 적용되지
+// 않으므로, 계산된 값을 직접 옮겨 줍니다. 원본과 한 치라도 다르면 단이 다르게 나뉩니다.
+const FLIP_COPIED_STYLES = [
+    'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color',
+    'textAlign', 'hyphens', 'webkitHyphens',
+    'columnCount', 'columnGap', 'columnFill', 'columnRule'
+];
+
+function buildFlipClone(body, offsetX) {
+    const source = getComputedStyle(body);
+    const clone = body.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.classList.add('text-flip-clone');
+
+    FLIP_COPIED_STYLES.forEach(name => {
+        clone.style[name] = source[name];
+    });
+    // 원본에 걸린 스크롤·여백 클래스는 복제본에서 방해가 됩니다. 단은 상자 밖으로
+    // 흘러 나가야 하므로 넘침을 열어 두고, 여백은 0으로 맞춰 자리를 어긋나지 않게 합니다.
+    clone.style.overflow = 'visible';
+    clone.style.padding = '0';
+    clone.style.margin = '0';
+    clone.style.left = `${-offsetX}px`;
+    clone.style.top = '0';
+    clone.style.width = `${body.clientWidth}px`;
+    clone.style.height = `${body.clientHeight}px`;
+    return clone;
+}
+
+function buildFlipWindow(body, { left, width, offsetX, className = 'text-flip-window' }) {
+    const pane = document.createElement('div');
+    pane.className = className;
+    pane.style.left = `${left}px`;
+    pane.style.width = `${width}px`;
+    pane.style.height = `${body.clientHeight}px`;
+    pane.appendChild(buildFlipClone(body, offsetX));
+    return pane;
+}
+
+/**
+ * 책장이 넘어가는 모습을 만듭니다.
+ *
+ * 실제 책과 같은 순서입니다. 앞으로 넘길 때는 **오른쪽 면**이 가운데 축을 중심으로
+ * 왼쪽으로 넘어가고, 그 **뒷면이 새 왼쪽 면**이 되어 내려앉습니다. 넘어가는 동안
+ * 밑에는 이미 다음 쪽이 깔려 있어서, 종이가 들리는 만큼 새 오른쪽 면이 드러납니다.
+ * 뒤로 넘길 때는 왼쪽 면이 오른쪽으로 넘어가는 정반대입니다.
+ */
+function playPageFlip(body, from, to, direction) {
+    const gap = textPageWidth(body) - body.clientWidth;
+    const columnWidth = (body.clientWidth - gap) / 2;
+    const rightOffset = columnWidth + gap;   // 오른쪽 단이 시작하는 자리
+    const rect = body.getBoundingClientRect();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'text-flip-overlay';
+    overlay.style.left = `${rect.left}px`;
+    overlay.style.top = `${rect.top}px`;
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+
+    const forward = direction > 0;
+    // 넘어가지 않고 그대로 남아 있는 면. 종이가 다 넘어가면 그 밑에 가려집니다.
+    overlay.appendChild(buildFlipWindow(body, {
+        left: forward ? 0 : rightOffset,
+        width: columnWidth,
+        offsetX: forward ? from : from + rightOffset
+    }));
+
+    const leaf = document.createElement('div');
+    leaf.className = 'text-flip-leaf';
+    leaf.style.left = `${forward ? rightOffset : 0}px`;
+    leaf.style.width = `${columnWidth}px`;
+    leaf.style.height = `${body.clientHeight}px`;
+    // 앞으로 넘길 때는 왼쪽 모서리가, 뒤로 넘길 때는 오른쪽 모서리가 책등입니다.
+    leaf.style.transformOrigin = forward ? 'left center' : 'right center';
+
+    const front = buildFlipWindow(body, {
+        left: 0,
+        width: columnWidth,
+        offsetX: forward ? from + rightOffset : from,
+        className: 'text-flip-face'
+    });
+    const back = buildFlipWindow(body, {
+        left: 0,
+        width: columnWidth,
+        offsetX: forward ? to : to + rightOffset,
+        className: 'text-flip-face text-flip-face-back'
+    });
+    leaf.append(front, back);
+    overlay.appendChild(leaf);
+    document.body.appendChild(overlay);
+
+    // 밑에는 다음 쪽을 미리 깔아 둡니다. 종이가 들리면 그것이 드러납니다.
+    body.scrollLeft = to;
+
+    const done = () => {
+        overlay.remove();
+        textFlipping = false;
+    };
+
+    if (prefersReducedMotion()) {
+        done();
+        return;
+    }
+
+    textFlipping = true;
+    // 시작 자세를 브라우저가 한 번 계산하게 만든 뒤에 목표 자세를 줍니다. 이래야
+    // transition이 걸립니다. requestAnimationFrame으로 미루면 창이 가려져 있을 때
+    // 프레임이 오지 않아 종이가 그대로 서 있습니다(실제로 그랬습니다).
+    void leaf.offsetWidth;
+    leaf.style.transform = `rotateY(${forward ? -180 : 180}deg)`;
+    // transitionend를 놓치는 경우가 있어(탭을 옮겼다 오는 등) 시간으로도 끝냅니다.
+    setTimeout(done, TEXT_FLIP_MS + 60);
+}
+
+function turnTextPage(direction) {
+    const body = document.getElementById('text-body');
+    if (!textIsPaged(body) || textFlipping) return;
+
+    const width = textPageWidth(body);
+    const from = body.scrollLeft;
+    const target = Math.min(
+        Math.max(from + direction * width, 0),
+        body.scrollWidth - body.clientWidth
+    );
+    if (Math.abs(target - from) < 1) return;
+
+    playPageFlip(body, from, target, direction);
+    updateTextPager(Math.round(target / width) + 1);
+}
+
+// 쪽 넘김 막대는 두 단일 때만 보입니다. 화면 크기가 바뀌면 다시 판단합니다.
+function updateTextPager(pageOverride = null) {
+    const body = document.getElementById('text-body');
+    const pager = document.getElementById('text-pager');
+    const paged = textIsPaged(body);
+
+    pager.classList.toggle('hidden', !paged);
+    pager.classList.toggle('flex', paged);
+    if (!paged) return;
+
+    const total = textPageCount(body);
+    const current = Math.min(total, pageOverride ?? textCurrentPage(body));
+    document.getElementById('text-page-count').innerText = `${current} / ${total}`;
+    document.getElementById('text-prev-page').disabled = current <= 1;
+    document.getElementById('text-next-page').disabled = current >= total;
+}
+
+// 휠을 한 번 굴리면 한 쪽입니다. 관성 스크롤이 여러 번 들어와도 한 번만 넘어가도록
+// 잠깐 잠급니다.
+let textWheelLocked = false;
+
+function handleTextWheel(event) {
+    const body = event.currentTarget;
+    if (!textIsPaged(body)) return;
+
+    const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    if (delta === 0) return;
+
+    event.preventDefault();
+    if (textWheelLocked) return;
+
+    textWheelLocked = true;
+    setTimeout(() => { textWheelLocked = false; }, 400);
+    turnTextPage(delta > 0 ? 1 : -1);
+}
+
+// ← → 와 PageUp/PageDown으로도 넘깁니다.
+function handleTextArrowKeys(event) {
+    if (document.getElementById('text-screen').classList.contains('hidden')) return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (!textIsPaged(document.getElementById('text-body'))) return;
+
+    if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+        event.preventDefault();
+        turnTextPage(1);
+    } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+        event.preventDefault();
+        turnTextPage(-1);
+    }
+}
+
+// 태블릿에서는 손가락으로 좌우로 쓸어 넘깁니다.
+let textTouchStartX = null;
+
+function handleTextTouchStart(event) {
+    textTouchStartX = event.touches.length === 1 ? event.touches[0].clientX : null;
+}
+
+function handleTextTouchEnd(event) {
+    if (textTouchStartX === null) return;
+
+    const moved = (event.changedTouches[0]?.clientX ?? textTouchStartX) - textTouchStartX;
+    textTouchStartX = null;
+    if (Math.abs(moved) < 40) return;
+    if (!textIsPaged(document.getElementById('text-body'))) return;
+
+    turnTextPage(moved < 0 ? 1 : -1);
+}
+
+function renderTextChapterList() {
+    renderGroupedChapterList({
+        container: document.getElementById('text-chapter-list'),
+        chapters: allTextChapters,
+        theme: 'text',
+        onSelect: (index, button) => openChapter(() => startTextChapter(index), button),
+        getCountLabel: chapter => `${chapter.paragraphCount || 0} 문단`
+    });
+}
+
+async function startTextChapter(index, { historyMode = 'push', animate = true } = {}) {
+    const entry = allTextChapters[index];
+    if (!entry) return;
+
+    const chapter = await requestTextChapter(entry);
+    currentTextChapterIndex = index;
+    const paragraphs = Array.isArray(chapter.paragraphs) ? chapter.paragraphs : [];
+
+    document.getElementById('text-chapter-title').innerText = formatChapterListLabel(entry.title, index);
+
+    const body = document.getElementById('text-body');
+    body.innerHTML = '';
+    body.scrollTop = 0;
+    // 두 단으로 볼 때는 가로로 넘기므로 그쪽도 처음으로 되돌립니다.
+    body.scrollLeft = 0;
+
+    const fragment = document.createDocumentFragment();
+    paragraphs.forEach(paragraph => {
+        const line = document.createElement('p');
+        line.innerText = paragraph;
+        fragment.appendChild(line);
+    });
+
+    // 챕터 끝에 다음 챕터로 넘어가는 버튼을 둡니다. 마지막 챕터에는 갈 곳이 없어
+    // 만들지 않습니다. text-base를 줘서 본문 글자를 키워도 버튼은 그대로 둡니다.
+    if (index + 1 < allTextChapters.length) {
+        const nextButton = document.createElement('button');
+        nextButton.id = 'text-next-btn';
+        nextButton.className = 'w-full rounded-xl bg-green-600 px-4 py-3 text-base font-bold text-white shadow-sm transition duration-200 hover:bg-green-700 hover:shadow-md';
+        nextButton.innerText = '다음 챕터로 이동 ➔';
+        nextButton.addEventListener('click', () =>
+            openChapter(() => startTextChapter(index + 1, { animate: false }), nextButton)
+        );
+        fragment.appendChild(nextButton);
+    }
+
+    body.appendChild(fragment);
+    applyTextFontSize();
+    showScreen('text-screen', { historyMode, animate });
+    // 단이 짜인 뒤라야 쪽 수를 셀 수 있으므로 화면을 띄운 다음에 셉니다.
+    updateTextPager(1);
+}
+
 // --- [5단계] 챕터 목록 생성 로직 ---
 function renderChapterList() {
     renderGroupedChapterList({
@@ -957,6 +1363,19 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
             role: 'text-red-500',
             chapterNumber: 'bg-red-100 text-red-700 group-hover:bg-red-600 group-hover:text-white',
             chapterSeparator: 'border-red-100 group-hover:border-red-200'
+        }
+        : theme === 'text'
+        ? {
+            group: 'border-green-100 bg-green-50 hover:border-green-300 hover:bg-green-100',
+            heading: 'text-green-800',
+            chevron: 'text-green-500',
+            chapter: 'border-green-100 hover:border-green-500 hover:bg-green-50',
+            chapterText: 'group-hover:text-green-700',
+            partBadge: 'bg-green-600 text-white shadow-sm',
+            separator: 'border-green-200',
+            role: 'text-green-500',
+            chapterNumber: 'bg-green-100 text-green-700 group-hover:bg-green-600 group-hover:text-white',
+            chapterSeparator: 'border-green-100 group-hover:border-green-200'
         }
         : {
             group: 'border-blue-100 bg-blue-50 hover:border-blue-300 hover:bg-blue-100',
@@ -1268,7 +1687,7 @@ function continueToNextChapter() {
 
 // --- 시작 화면을 보여 주는 동안 퀴즈/어휘 자료를 미리 받아 둡니다 ---
 export function startReadingApp(api) {
-    const { loadChapterIndex, loadChapter, loadAllChapters } = api;
+    const { loadChapterIndex, loadChapter, loadAllChapters, loadTextIndex, loadTextChapter } = api;
     novelApi = api;
 
     if (appStarted) {
@@ -1282,6 +1701,8 @@ export function startReadingApp(api) {
     loadAuthorizedIndex = loadChapterIndex;
     loadAuthorizedChapter = loadChapter;
     loadAuthorizedAllChapters = loadAllChapters;
+    loadAuthorizedTextIndex = loadTextIndex;
+    loadAuthorizedTextChapter = loadTextChapter;
     window.history.replaceState(createHistoryState('novel-screen'), '', window.location.href);
     window.addEventListener('popstate', event => restoreHistoryScreen(event.state));
     document.getElementById('novel-back-btn').addEventListener('click', () => {
@@ -1290,6 +1711,9 @@ export function startReadingApp(api) {
     });
     document.getElementById('start-btn').addEventListener('click', startQuiz);
     document.getElementById('word-btn').addEventListener('click', startWords);
+    document.getElementById('text-btn').addEventListener('click', startTexts);
+    document.getElementById('text-smaller-btn').addEventListener('click', () => changeTextFontSize(-1));
+    document.getElementById('text-larger-btn').addEventListener('click', () => changeTextFontSize(1));
     document.getElementById('quiz-back-btn').addEventListener('click', goToChapters);
     document.getElementById('prev-btn').addEventListener('click', previousQuestion);
     document.getElementById('next-btn').addEventListener('click', nextQuestion);
@@ -1312,9 +1736,27 @@ export function startReadingApp(api) {
     document.querySelectorAll('[data-action="go-word-chapters"]').forEach(button =>
         button.addEventListener('click', goToWordChapters)
     );
+    document.querySelectorAll('[data-action="go-text-chapters"]').forEach(button =>
+        button.addEventListener('click', goToTextChapters)
+    );
     document.addEventListener('selectstart', event => event.preventDefault());
     document.addEventListener('contextmenu', event => event.preventDefault());
     document.addEventListener('keydown', handleWordChapterArrowKeys);
+    document.addEventListener('keydown', handleTextArrowKeys);
+    document.getElementById('text-prev-page').addEventListener('click', () => turnTextPage(-1));
+    document.getElementById('text-next-page').addEventListener('click', () => turnTextPage(1));
+
+    const textBody = document.getElementById('text-body');
+    // preventDefault를 쓰려면 passive가 아니어야 합니다.
+    textBody.addEventListener('wheel', handleTextWheel, { passive: false });
+    textBody.addEventListener('touchstart', handleTextTouchStart, { passive: true });
+    textBody.addEventListener('touchend', handleTextTouchEnd, { passive: true });
+    // 창 크기나 방향이 바뀌면 한 단 ↔ 두 단이 바뀝니다. 그때마다 다시 셉니다.
+    window.addEventListener('resize', () => {
+        if (document.getElementById('text-screen').classList.contains('hidden')) return;
+        textBody.scrollLeft = 0;
+        updateTextPager(1);
+    });
     // 앱 전체는 글자를 고르지 못하게 막아 두었지만, 검색창에서는 고르고 붙여넣을
     // 수 있어야 합니다. 위 두 줄까지 올라가기 전에 여기서 막습니다.
     const searchModal = document.getElementById('search-modal');
