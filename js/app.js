@@ -16,7 +16,7 @@ import {
 
 // 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
 // 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
-const APP_VERSION = '2026-08-28-evidence-red';
+const APP_VERSION = '2026-09-01-word-search';
 const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
 // 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
@@ -83,6 +83,12 @@ let allWordChapters = [];       // 단어장(Word) 챕터 목록
 let currentWordChapterIndex = 0;
 let loadAuthorizedIndex = null;
 let loadAuthorizedChapter = null;
+let loadAuthorizedAllChapters = null;
+// 어휘 검색 상태입니다. 검색 중이 아니면 둘 다 비어 있습니다.
+// wordSearchMatches는 '챕터 position → 매칭된 카드 번호 배열'이고, 이 지도에 없는
+// 챕터는 목록에서 빠집니다.
+let wordSearchQuery = '';
+let wordSearchMatches = null;
 let novelApi = null;          // auth.js가 넘겨준 소설 목록·선택 함수
 let selectableNovels = [];    // 이 학생이 볼 수 있는 소설만 추린 목록
 let activeNovel = null;
@@ -231,6 +237,13 @@ function requestChapter(mode, entry) {
     return loadAuthorizedChapter(mode, entry.position);
 }
 
+// 검색은 챕터 본문을 모두 훑어야 하므로 한 번에 받아 옵니다. 미리 받아 둔 것이
+// 있으면 네트워크를 쓰지 않습니다.
+function requestAllChapters(mode) {
+    if (!loadAuthorizedAllChapters) return Promise.reject(new Error('로그인 정보가 준비되지 않았습니다.'));
+    return loadAuthorizedAllChapters(mode);
+}
+
 // --- 소설 선택 ---
 // 볼 수 있는 소설이 하나뿐이면 고르는 화면을 건너뜁니다.
 async function openNovelPicker({ historyMode = 'replace' } = {}) {
@@ -322,6 +335,9 @@ async function chooseNovel(novel, { historyMode = 'push' } = {}) {
     allChapters = [];
     allWordChapters = [];
     hiddenQuizChapterCount = 0;
+    // 검색 결과는 그 소설의 챕터 자리를 가리키므로 소설을 바꾸면 버립니다.
+    clearWordSearchState();
+    updateSearchChips();
     visibleQuizRanges = await loadQuizVisibility(novel.id);
     applyNovelToStartScreen(novel);
     status.innerText = '';
@@ -557,12 +573,183 @@ function renderWordSentence(text) {
     }).join('');
 }
 
+// --- 어휘·배경지식 검색 ---
+// 찾는 곳은 세 가지입니다. 어휘 카드의 표제어와 예문, 그리고 배경지식 카드의 문구
+// (시트의 eng). 파생어 칩(동의어·반의어)과 연어, 어휘의 뜻, 배경지식의 우리말 설명은
+// 일부러 뺐습니다. 학생이 찾는 것은 소설에 실제로 나온 표현이라, 태그나 설명까지
+// 걸리면 엉뚱한 챕터가 함께 나옵니다.
+function searchableText(value) {
+    return String(value ?? '')
+        .replace(/\[\/?\s*SENTENCE\s*\]/gi, ' ')
+        .replace(/\[\s*RED\s*:\s*([\s\S]*?)\]/gi, '$1')
+        // 시트의 sentence는 강조할 어휘를 [ ]로 감쌉니다. 표시를 그대로 두면
+        // 'all gotten pretty good at'처럼 대괄호를 걸치는 문구가 걸리지 않습니다.
+        .replace(/[[\]]/g, ' ')
+        // 곧은 따옴표로 친 검색어가 본문의 굽은 따옴표에도 걸리게 맞춥니다.
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function searchFieldsOf(item) {
+    if (item?.type === 'word') return [item.word, item.sentence];
+    return [item?.title];
+}
+
+function itemMatchesQuery(item, query) {
+    return searchFieldsOf(item).some(field => searchableText(field).includes(query));
+}
+
+// 챕터마다 매칭된 카드 번호를 모읍니다. 하나도 없는 챕터는 지도에 넣지 않으므로
+// 목록에서도 빠집니다.
+async function collectSearchMatches(query) {
+    const chapters = await requestAllChapters('word');
+    const matches = new Map();
+
+    allWordChapters.forEach(entry => {
+        const items = chapters[entry.position]?.items;
+        if (!Array.isArray(items)) return;
+
+        const hits = [];
+        items.forEach((item, index) => {
+            if (itemMatchesQuery(item, query)) hits.push(index);
+        });
+        if (hits.length > 0) matches.set(entry.position, hits);
+    });
+
+    return matches;
+}
+
+function clearWordSearchState() {
+    wordSearchQuery = '';
+    wordSearchMatches = null;
+}
+
+// 지금 보는 챕터에서 보여 줄 카드 번호입니다. 검색 중이 아니면 null이고, 그때는
+// 카드를 하나도 가리지 않습니다.
+function matchedItemsOf(entry) {
+    return wordSearchMatches?.get(entry?.position) ?? null;
+}
+
+function isWordChapterInSearch(chapter) {
+    if (!wordSearchMatches) return true;
+    return wordSearchMatches.has(chapter?.position);
+}
+
+// 검색 중임을 알리는 칩입니다. 목차 화면과 어휘 화면 둘 다에 두어 어디서든 ✕로
+// 풀 수 있습니다.
+function updateSearchChips() {
+    const searching = Boolean(wordSearchMatches);
+    const chapterCount = searching ? wordSearchMatches.size : 0;
+    const cardCount = searching
+        ? [...wordSearchMatches.values()].reduce((total, hits) => total + hits.length, 0)
+        : 0;
+
+    [
+        { chip: 'word-chapter-search-chip', label: 'word-chapter-search-label', count: 'word-chapter-search-count' },
+        { chip: 'word-search-chip', label: 'word-search-label', count: 'word-search-count' }
+    ].forEach(ids => {
+        const chip = document.getElementById(ids.chip);
+        chip.classList.toggle('hidden', !searching);
+        chip.classList.toggle('flex', searching);
+        if (!searching) return;
+
+        document.getElementById(ids.label).innerText = `"${wordSearchQuery}"`;
+        document.getElementById(ids.count).innerText = `${chapterCount}개 챕터 · ${cardCount}개 카드`;
+    });
+}
+
+// ✕를 누르면 검색을 풀고 전체 목록으로 돌아갑니다. 어휘 화면에서 눌렀다면 보고
+// 있던 챕터는 그대로 두고 가려 둔 카드만 되살립니다.
+function clearWordSearch() {
+    if (!wordSearchMatches) return;
+
+    clearWordSearchState();
+    updateSearchChips();
+    renderWordChapterList();
+    document.getElementById('word-chapter-list').scrollTop = 0;
+
+    if (!document.getElementById('word-screen').classList.contains('hidden')) {
+        openChapter(() => startWordChapter(currentWordChapterIndex, { historyMode: 'none', animate: false }));
+    }
+}
+
+function openSearchModal() {
+    const modal = document.getElementById('search-modal');
+    const input = document.getElementById('search-input');
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.getElementById('search-status').innerText = '';
+    input.value = wordSearchQuery;
+    input.focus();
+    input.select();
+}
+
+function closeSearchModal() {
+    const modal = document.getElementById('search-modal');
+    if (!modal) return;
+
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    setSearchBusy(false);
+}
+
+function setSearchBusy(busy) {
+    const submit = document.getElementById('search-submit-btn');
+    submit.disabled = busy;
+    submit.classList.toggle('opacity-60', busy);
+    submit.classList.toggle('cursor-not-allowed', busy);
+    document.getElementById('search-input').disabled = busy;
+}
+
+async function submitWordSearch(event) {
+    event.preventDefault();
+    const status = document.getElementById('search-status');
+    const typed = document.getElementById('search-input').value.trim();
+    const query = searchableText(typed);
+
+    if (!query) {
+        status.innerText = '찾을 단어나 구를 입력해 주세요.';
+        return;
+    }
+
+    setSearchBusy(true);
+    status.innerText = '찾는 중입니다...';
+
+    try {
+        const matches = await collectSearchMatches(query);
+        // 하나도 없으면 빈 목록을 보여 주는 대신, 창을 열어 둔 채 알립니다.
+        // 검색어를 고쳐 바로 다시 찾을 수 있습니다.
+        if (matches.size === 0) {
+            status.innerText = '일치하는 카드가 없습니다.';
+            return;
+        }
+
+        wordSearchQuery = typed;
+        wordSearchMatches = matches;
+        closeSearchModal();
+        updateSearchChips();
+        renderWordChapterList();
+        document.getElementById('word-chapter-list').scrollTop = 0;
+    } catch (error) {
+        console.error('검색에 실패했습니다:', error);
+        status.innerText = '자료를 불러오지 못해 찾지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    } finally {
+        setSearchBusy(false);
+    }
+}
+
 // --- [5-2단계] 단어장 챕터 목록 ---
 function renderWordChapterList() {
     renderGroupedChapterList({
         container: document.getElementById('word-chapter-list'),
         chapters: allWordChapters,
         theme: 'word',
+        // 검색 중에는 매칭된 카드가 하나라도 있는 챕터만 남깁니다.
+        includeChapter: isWordChapterInSearch,
         onSelect: (index, button) => openChapter(() => startWordChapter(index), button),
         getCountLabel: chapter => {
             const wordCount = chapter.wordCount || 0;
@@ -644,7 +831,11 @@ async function startWordChapter(index, { historyMode = 'push', animate = true } 
     const chapter = await requestChapter('word', entry);
     currentWordChapterIndex = index;
     const items = Array.isArray(chapter.items) ? chapter.items : [];
-    const wordCount = items.filter(item => item.type === 'word').length;
+    // 검색 중에는 걸린 카드만 보여 줍니다. 카드 번호는 원래 자리 그대로 두어
+    // 몇 번째 어휘인지 알아볼 수 있게 합니다.
+    const matchedItems = matchedItemsOf(entry);
+    const isVisibleItem = itemIndex => !matchedItems || matchedItems.includes(itemIndex);
+    const wordCount = items.filter((item, itemIndex) => item.type === 'word' && isVisibleItem(itemIndex)).length;
 
     document.getElementById('word-chapter-title').innerText = formatChapterListLabel(entry.title, index);
     document.getElementById('word-count-text').innerText = `${wordCount} 단어`;
@@ -658,11 +849,13 @@ async function startWordChapter(index, { historyMode = 'push', animate = true } 
     // 카드를 하나씩 붙이면 그때마다 화면 계산이 다시 돌아갑니다. 한 번에 붙입니다.
     const fragment = document.createDocumentFragment();
 
-    items.forEach(item => {
+    items.forEach((item, itemIndex) => {
+        if (item.type === 'word') wordNumber++;
+        if (!isVisibleItem(itemIndex)) return;
+
         const card = document.createElement('div');
 
         if (item.type === 'word') {
-            wordNumber++;
             card.className = "border-2 border-red-100 rounded-xl p-4 bg-white";
             card.innerHTML = `
                 <div class="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-3">
@@ -697,19 +890,29 @@ async function startWordChapter(index, { historyMode = 'push', animate = true } 
     });
 
     listContainer.appendChild(fragment);
+    updateSearchChips();
     updateWordChapterNavigation();
     showScreen('word-screen', { historyMode, animate });
 }
 
+// 검색 중에는 매칭된 챕터만 목록에 나오므로 ← → 도 그 챕터들 사이만 오갑니다.
+// 걸리지 않은 챕터로 넘어가면 카드가 하나도 없는 화면이 나옵니다.
+function findAdjacentWordChapter(direction) {
+    for (let index = currentWordChapterIndex + direction; index >= 0 && index < allWordChapters.length; index += direction) {
+        if (isWordChapterInSearch(allWordChapters[index])) return index;
+    }
+    return -1;
+}
+
 function moveWordChapter(direction) {
-    const targetIndex = currentWordChapterIndex + direction;
-    if (targetIndex < 0 || targetIndex >= allWordChapters.length) return;
+    const targetIndex = findAdjacentWordChapter(direction);
+    if (targetIndex < 0) return;
     openChapter(() => startWordChapter(targetIndex, { animate: false }));
 }
 
 function updateWordChapterNavigation() {
-    document.getElementById('word-prev-btn').disabled = currentWordChapterIndex <= 0;
-    document.getElementById('word-next-btn').disabled = currentWordChapterIndex >= allWordChapters.length - 1;
+    document.getElementById('word-prev-btn').disabled = findAdjacentWordChapter(-1) < 0;
+    document.getElementById('word-next-btn').disabled = findAdjacentWordChapter(1) < 0;
 }
 
 function handleWordChapterArrowKeys(event) {
@@ -740,7 +943,7 @@ function formatChapterListLabel(title, fallbackIndex) {
     return formatDisplayChapterTitle(title, fallbackIndex);
 }
 
-function renderGroupedChapterList({ container, chapters, theme, onSelect, getCountLabel }) {
+function renderGroupedChapterList({ container, chapters, theme, onSelect, getCountLabel, includeChapter = null }) {
     container.innerHTML = '';
     const styles = theme === 'word'
         ? {
@@ -768,7 +971,13 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
             chapterSeparator: 'border-blue-100 group-hover:border-blue-200'
         };
 
-    const groups = groupChaptersByCategory(chapters);
+    // 거를 때도 index는 원래 목록의 자리 그대로여야 합니다. onSelect가 그 번호로
+    // 챕터를 여니, 걸러진 배열을 넘기지 않고 묶은 뒤에 덜어 냅니다.
+    const groups = groupChaptersByCategory(chapters)
+        .map(group => (includeChapter
+            ? { ...group, entries: group.entries.filter(({ chapter }) => includeChapter(chapter)) }
+            : group))
+        .filter(group => group.entries.length > 0);
     const expandByDefault = groups.length === 1;
 
     groups.forEach(group => {
@@ -1059,7 +1268,7 @@ function continueToNextChapter() {
 
 // --- 시작 화면을 보여 주는 동안 퀴즈/어휘 자료를 미리 받아 둡니다 ---
 export function startReadingApp(api) {
-    const { loadChapterIndex, loadChapter } = api;
+    const { loadChapterIndex, loadChapter, loadAllChapters } = api;
     novelApi = api;
 
     if (appStarted) {
@@ -1072,6 +1281,7 @@ export function startReadingApp(api) {
     appStarted = true;
     loadAuthorizedIndex = loadChapterIndex;
     loadAuthorizedChapter = loadChapter;
+    loadAuthorizedAllChapters = loadAllChapters;
     window.history.replaceState(createHistoryState('novel-screen'), '', window.location.href);
     window.addEventListener('popstate', event => restoreHistoryScreen(event.state));
     document.getElementById('novel-back-btn').addEventListener('click', () => {
@@ -1086,6 +1296,12 @@ export function startReadingApp(api) {
     document.getElementById('word-prev-btn').addEventListener('click', () => moveWordChapter(-1));
     document.getElementById('word-next-btn').addEventListener('click', () => moveWordChapter(1));
     document.getElementById('word-list').addEventListener('click', handleTtsClick);
+    document.getElementById('word-search-btn').addEventListener('click', openSearchModal);
+    document.getElementById('search-form').addEventListener('submit', submitWordSearch);
+    document.getElementById('search-cancel-btn').addEventListener('click', closeSearchModal);
+    document.querySelectorAll('[data-action="clear-word-search"]').forEach(button =>
+        button.addEventListener('click', clearWordSearch)
+    );
     document.getElementById('explanation-box').addEventListener('click', handleTtsClick);
     document.getElementById('result-back-btn').addEventListener('click', () => showScreen('chapter-screen'));
     document.getElementById('continue-yes-btn').addEventListener('click', continueToNextChapter);
@@ -1099,6 +1315,18 @@ export function startReadingApp(api) {
     document.addEventListener('selectstart', event => event.preventDefault());
     document.addEventListener('contextmenu', event => event.preventDefault());
     document.addEventListener('keydown', handleWordChapterArrowKeys);
+    // 앱 전체는 글자를 고르지 못하게 막아 두었지만, 검색창에서는 고르고 붙여넣을
+    // 수 있어야 합니다. 위 두 줄까지 올라가기 전에 여기서 막습니다.
+    const searchModal = document.getElementById('search-modal');
+    searchModal.addEventListener('selectstart', event => event.stopPropagation());
+    searchModal.addEventListener('contextmenu', event => event.stopPropagation());
+    searchModal.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeSearchModal();
+    });
+    // 창 바깥의 어두운 곳을 누르면 닫습니다.
+    searchModal.addEventListener('click', event => {
+        if (event.target === searchModal) closeSearchModal();
+    });
     // 소설을 고르면 그때부터 그 소설의 챕터를 미리 받아 둡니다. 캐시가 최신이면
     // 아무것도 내려받지 않으므로 버튼을 눌렀을 때 기다림이 없습니다.
     openNovelPicker({ historyMode: 'replace' })

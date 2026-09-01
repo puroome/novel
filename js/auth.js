@@ -59,6 +59,8 @@ let manifestReady = null;
 let stopManifestWatch = null;
 const indexRequests = new Map();
 const chapterRequests = new Map();
+// 검색처럼 챕터 본문을 통째로 훑어야 하는 요청입니다. 종류마다 하나만 돕니다.
+const allChapterRequests = new Map();
 const backgroundFilled = new Set();
 
 function getElement(id) {
@@ -125,6 +127,7 @@ function revealApp(startReadingApp) {
     startReadingApp({
         loadChapterIndex,
         loadChapter,
+        loadAllChapters,
         prepareLibraryCache,
         listNovels,
         selectNovel,
@@ -195,6 +198,7 @@ function applyContentManifest(manifest) {
         if (!version || previous?.[kind]?.version === version) return;
 
         indexRequests.delete(kind);
+        allChapterRequests.delete(kind);
         backgroundFilled.delete(kind);
         [...chapterRequests.keys()]
             .filter(key => key.startsWith(`${kind}:`))
@@ -314,6 +318,35 @@ async function resolveChapter(kind, position) {
     return chapter;
 }
 
+// 어휘 검색은 챕터 본문을 모두 훑어야 합니다. 기기에 이미 받아 둔 것이 있으면
+// 그대로 쓰고, 하나라도 빠져 있을 때만 한 번에 받아 채웁니다. 챕터마다 따로
+// 요청하면 백 번이 넘는 왕복이 됩니다.
+function loadAllChapters(kind) {
+    const normalizedKind = normalizeKind(kind);
+    const pending = allChapterRequests.get(normalizedKind);
+    if (pending) return pending;
+
+    const request = resolveAllChapters(normalizedKind);
+    allChapterRequests.set(normalizedKind, request);
+    request.catch(() => {
+        if (allChapterRequests.get(normalizedKind) === request) allChapterRequests.delete(normalizedKind);
+    });
+    return request;
+}
+
+// 돌려주는 배열은 목록의 position 순서입니다. 화면용으로 정렬한 목록과는 순서가
+// 다르므로, 부르는 쪽에서 entry.position으로 찾아 씁니다.
+async function resolveAllChapters(kind) {
+    const { version, entries } = await loadChapterIndex(kind);
+
+    const cached = await Promise.all(entries.map(entry => readCachedChapter(activeNovelId, kind, entry.position, version)));
+    if (cached.every(chapter => chapter)) return cached;
+
+    const chapters = await fetchAllChapters(kind);
+    await saveCachedChapters(activeNovelId, kind, version, chapters);
+    return chapters;
+}
+
 async function fetchAllChapters(kind) {
     const snapshot = await get(ref(database, `${novelContentPath()}/${kind}/chapters`));
     if (!snapshot.exists()) {
@@ -381,6 +414,7 @@ function resetLibraryState() {
     manifestReady = null;
     indexRequests.clear();
     chapterRequests.clear();
+    allChapterRequests.clear();
     backgroundFilled.clear();
 }
 
