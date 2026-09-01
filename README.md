@@ -110,35 +110,132 @@ novel/text/{소설 id}/index            [{chapterNo, title, partTitle, paragraph
 novel/text/{소설 id}/chapters/{위치}   {chapterNo, title, paragraphs: [...]}
 ```
 
-### 올리는 순서
+### 원문 화면에서 낱말 누르기
 
-1. epub에서 챕터별 텍스트를 뽑습니다(`novel-data/tools/extract.py`). 이미 뽑아 둔
-   소설은 건너뜁니다.
-2. 앱이 읽는 JSON으로 만듭니다.
+이북 리더기처럼 낱말을 눌러 듣고 뜻을 볼 수 있습니다.
 
-   ```bash
-   python novel-data/tools/build_text.py wonder --text novel-data/wonder/text --out novel-data/wonder/text.json
-   ```
+| 조작 | 하는 일 |
+|---|---|
+| 한 번 누르기 / 터치 | 그 **낱말**을 읽어 줍니다 |
+| 두 번 누르기 | `문장` `문단` 차림표가 뜨고, 고른 만큼 읽어 줍니다 |
+| 우클릭 / 길게 누르기 | 그 낱말이 든 **문장의 우리말 해석**을 문장 아래에 띄웁니다 |
 
-   제목은 파일 첫 줄이 `Part One: August | Ordinary` 꼴이면 거기서 읽고, 없으면
-   `--titles`로 준 TSV(`part_title`/`chapter_no`/`chapter_title`)에서 읽습니다.
-   `[p.12]` 쪽 표시는 지웁니다. 실물 책은 출판사마다 쪽번호가 달라 맞지 않습니다.
-3. Firebase에 올립니다. **비밀키는 환경 변수로 줍니다.**
+- 해석은 Apps Script의 `LanguageApp.translate()`가 만듭니다. **따로 API 키가 필요
+  없고 요금도 들지 않습니다.** 한 번 옮긴 문장은 기기에 저장해 다시 부르지 않습니다.
+- **`Code.gs`를 새로 배포해야 해석이 됩니다.** 저장만 하면 시트 동기화는 되는데
+  앱이 부르는 `translate` 요청은 옛 코드가 받아 '지원하지 않는 요청입니다'가 납니다.
+- 읽어 주기는 **아이폰·아이패드에서는 동작하지 않습니다.** iOS의 음성 품질이 너무
+  낮아 앱 전체에서 막아 두었기 때문이며, 그 기기에서는 안내 문구가 대신 뜹니다.
 
-   ```bash
-   python novel-data/tools/upload_text.py wonder --json novel-data/wonder/text.json
-   ```
+### 새 소설의 원문을 올리는 절차
 
-   `--dry`를 붙이면 무엇을 올릴지만 보여 줍니다.
+아래 예시는 소설 id가 `holes`인 경우입니다. **`holes` 자리에 올릴 소설의 id를**
+넣으세요. id는 `novels` 시트의 것과 **똑같아야** 합니다.
 
-### 보안 규칙
+#### 0단계 — 먼저 확인할 것
 
-`novel/text/$novelId`는 **그 소설이 허용된 학생만** 읽습니다
-(`accessByUid/$uid/novels/$novelId`). `novel/content`가 승인된 사용자 모두에게
-열려 있는 것과 다릅니다. 원서 전문이라 더 좁게 잡았습니다.
+- `novels` 시트에 그 소설이 있고 `active`가 `yes`인가
+- `AllowedUsers` 시트에 **그 소설 이름의 열**이 있고, 볼 학생이 `yes`인가
+- 시트 메뉴에서 **`허용 명단 동기화`를 한 번 실행했는가**
 
-> 원문이 안 보이면 **`허용 명단 동기화`를 먼저 실행하세요.** 그 값이 없으면
-> 규칙이 막습니다. 잠기는 쪽으로 실패하도록 일부러 그렇게 두었습니다.
+> 마지막 항목을 빠뜨리면 원문이 안 보입니다. 보안 규칙이 학생별 소설 권한을
+> 검사하는데 그 값을 이 동기화가 만듭니다.
+
+**보안 규칙은 고칠 필요가 없습니다.** `novel/text/$novelId` 규칙이 소설 이름을
+가리지 않아서, 새 소설도 규칙을 건드리지 않고 그대로 보호됩니다.
+
+#### 1단계 — epub에서 챕터별 텍스트 뽑기
+
+**이 단계만 소설마다 다릅니다.** epub은 출판사마다 파일 구조와 챕터를 나누는 방식이
+달라서, 정해진 명령 하나로 끝나지 않습니다. **Claude에게 "이 epub에서 챕터별 텍스트를
+뽑아 줘"라고 맡기세요.** `novel-data/tools/`의 `extract.py`·`extract_wonder.py`가
+참고할 본보기입니다.
+
+결과물은 이런 모양이어야 합니다.
+
+```text
+novel-data/holes/text/ch01.txt, ch02.txt, ...     (챕터마다 한 파일)
+```
+
+- 파일 이름은 `ch` + 숫자입니다. 숫자는 `{id}_word` 시트의 `chapter_no`와 같아야 합니다.
+- 한 문단이 한 줄입니다. 빈 줄은 없어도 됩니다.
+- 첫 줄에 `Part One: August | Ordinary`처럼 **`파트 | 챕터제목`** 머리글을 넣으면
+  제목을 따로 주지 않아도 됩니다(wonder 방식).
+
+#### 2단계 — 앱이 읽는 JSON 만들기
+
+머리글이 **있는** 경우:
+
+```bash
+python novel-data/tools/build_text.py holes --text novel-data/holes/text --out novel-data/holes/text.json
+```
+
+머리글이 **없는** 경우, 제목을 어디서 가져올지 알려 줍니다. `{id}_word` 시트를
+TSV로 내려받아 쓰면 됩니다(`part_title` / `chapter_no` / `chapter_title` 순서의 세 열).
+
+```bash
+python novel-data/tools/build_text.py holes --text novel-data/holes/text --titles novel-data/holes/holes_word.tsv --out novel-data/holes/text.json
+```
+
+성공하면 이렇게 나옵니다.
+
+```text
+holes: 50챕터 · 47,120단어 · version 3f9c1a20b7de
+  첫 챕터: Chapter 1: ... (12문단)
+  끝 챕터: Chapter 50: ... (8문단)
+```
+
+이 단계에서 **추출 흔적 검사**가 자동으로 돕니다. `@@PAGE 7@@` 같은 표시나 남은
+HTML 태그가 본문에 하나라도 있으면 **JSON을 만들지 않고** 어느 챕터 몇 번째 문단인지
+알려 주고 멈춥니다. 그 메시지가 나오면 1단계로 돌아가 추출을 고칩니다.
+
+#### 3단계 — Firebase에 올리기
+
+**① 무엇이 올라갈지 먼저 봅니다 (아직 안 올라감)**
+
+```bash
+python novel-data/tools/upload_text.py holes --json novel-data/holes/text.json --dry
+```
+
+**② 주소와 비밀키를 알려 줍니다** (PowerShell 기준. 비밀키는 Apps Script 프로젝트
+설정의 `FIREBASE_SECRET` 값과 같습니다)
+
+```bash
+$env:FIREBASE_URL = 'https://novel-91d5f-default-rtdb.asia-southeast1.firebasedatabase.app'
+```
+
+```bash
+$env:FIREBASE_SECRET = '여기에_비밀키_붙여넣기'
+```
+
+**③ 올립니다**
+
+```bash
+python novel-data/tools/upload_text.py holes --json novel-data/holes/text.json
+```
+
+`올렸습니다. HTTP 200` 이 나오면 끝입니다.
+
+#### 4단계 — 확인
+
+앱에서 그 소설을 열고 **`Reading Text`** 버튼을 누릅니다.
+
+| 화면에 나오는 말 | 뜻 |
+|---|---|
+| 챕터 목록이 나옴 | 성공 |
+| `이 소설의 원문이 아직 올라가지 않았습니다` | 3단계가 안 됐거나 소설 id가 다름 |
+| `... permission_denied ...` | 0단계의 `허용 명단 동기화`를 안 함 |
+
+### 알아 둘 것
+
+- **비밀키는 코드에 적지 않습니다.** 환경 변수로만 받습니다. 붙여넣은 PowerShell
+  창은 작업이 끝나면 닫으세요.
+- **`certificate verify failed` 오류가 나면** 백신이나 학교·회사 망의 HTTPS 검사
+  때문입니다. 스크립트가 `curl`로 알아서 우회하므로 대개 그냥 됩니다.
+- **같은 소설을 다시 올려도 안전합니다.** 내용이 그대로면 `version`도 그대로라
+  학생 기기는 아무것도 다시 받지 않습니다. 내용을 고쳐 올리면 `version`이 바뀌고,
+  학생은 **새로고침만 해도** 새 원문을 받습니다.
+- **`{id}_test`(퀴즈 공개 범위)는 원문과 무관합니다.** 원문은 챕터를 가리지 않습니다.
 
 ## Apps Script 설정
 

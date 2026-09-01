@@ -16,9 +16,11 @@ import {
     clearLibraryCache,
     migrateLegacyLibraryCache,
     readCachedChapter,
+    readCachedTranslation,
     readChapterIndex,
     saveCachedChapter,
     saveCachedChapters,
+    saveCachedTranslation,
     saveChapterIndex
 } from './library-cache.js';
 
@@ -141,6 +143,7 @@ function revealApp(startReadingApp) {
         loadAllChapters,
         loadTextIndex,
         loadTextChapter,
+        translateSentence,
         prepareLibraryCache,
         listNovels,
         selectNovel,
@@ -371,6 +374,38 @@ async function fetchAllChapters(kind) {
         throw new Error('Firebase 학습 자료 구조가 올바르지 않습니다. 다시 동기화해 주세요.');
     }
     return chapters;
+}
+
+// 원문 화면에서 문장 하나를 우리말로 옮깁니다. Apps Script의 LanguageApp을 쓰므로
+// 따로 키가 필요 없고, 한 번 옮긴 문장은 기기에 담아 두어 다시 부르지 않습니다.
+// 같은 문장을 연달아 누르면 요청이 겹치지 않게 하나로 묶습니다.
+const translationRequests = new Map();
+
+function translateSentence(text) {
+    const source = String(text || '').trim();
+    if (!source) return Promise.resolve('');
+
+    const pending = translationRequests.get(source);
+    if (pending) return pending;
+
+    const request = resolveTranslation(source);
+    translationRequests.set(source, request);
+    request.catch(() => {
+        if (translationRequests.get(source) === request) translationRequests.delete(source);
+    });
+    return request;
+}
+
+async function resolveTranslation(source) {
+    const cached = await readCachedTranslation(source);
+    if (cached) return cached;
+
+    const response = await callScript('translate', { text: source });
+    const translation = String(response?.translation || '').trim();
+    if (!translation) throw new Error('해석을 받지 못했습니다.');
+
+    await saveCachedTranslation(source, translation);
+    return translation;
 }
 
 // --- 원문 ---

@@ -244,6 +244,9 @@ function doGet(e) {
           ...requestAccess(account, e.parameter.name, e.parameter.grade),
         };
         break;
+      case 'translate':
+        result = { success: true, ...translateToKorean(e.parameter.text) };
+        break;
       default:
         throw new Error('지원하지 않는 요청입니다.');
     }
@@ -253,6 +256,22 @@ function doGet(e) {
     console.error('[Novel doGet] 오류:', error.message);
     return jsonResponse({ success: false, message: error.message || '요청 처리에 실패했습니다.' });
   }
+}
+
+/**
+ * 원문 읽기 화면에서 문장 하나를 우리말로 옮깁니다.
+ *
+ * Apps Script에 들어 있는 LanguageApp을 씁니다. 따로 API 키가 필요 없고 요금도
+ * 들지 않습니다. voca-main 앱이 같은 방식을 쓰고 있어 그대로 맞췄습니다.
+ * doGet이 먼저 로그인을 확인하므로 승인된 학생만 부를 수 있습니다.
+ */
+function translateToKorean(text) {
+  const source = String(text || '').trim();
+  if (!source) throw new Error('옮길 문장이 없습니다.');
+  // 한 문장을 넘겨받는 자리입니다. 지나치게 길면 통째로 번역기를 부르지 않습니다.
+  if (source.length > 1000) throw new Error('문장이 너무 깁니다.');
+
+  return { text: source, translation: LanguageApp.translate(source, 'en', 'ko') };
 }
 
 function jsonResponse(data) {

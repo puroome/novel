@@ -75,6 +75,11 @@
             -webkit-user-select: text;
             user-select: text;
         }
+        /* 길게 누르면 우리말 해석을 띄웁니다. 브라우저 기본 동작(글자 선택·확대경)이
+           끼어들지 않도록 막습니다. */
+        #text-body p {
+            -webkit-touch-callout: none;
+        }
         /* 원문 글자 크기는 + - 버튼이 1px씩 조절합니다. 값은 app.js가 넣습니다. */
         #text-body {
             font-size: var(--text-body-size, 16px);
@@ -90,60 +95,6 @@
             text-align: center;
             -webkit-hyphens: none;
             hyphens: none;
-        }
-
-        /* 책장 넘김. 오른쪽 면이 가운데 축을 중심으로 넘어가고, 그 뒷면이 왼쪽에
-           내려앉습니다. 넘어가는 동안 밑에는 이미 다음 쪽이 깔려 있습니다.
-           클래스 이름은 Tailwind가 만든 것이 아니라 app.js가 직접 붙입니다. */
-        .text-flip-overlay {
-            position: fixed;
-            z-index: 40;
-            pointer-events: none;
-            perspective: 2200px;
-        }
-        .text-flip-window,
-        .text-flip-face {
-            position: absolute;
-            top: 0;
-            overflow: hidden;
-            background: #ffffff;
-        }
-        .text-flip-leaf {
-            position: absolute;
-            top: 0;
-            transform-style: preserve-3d;
-            transition: transform 520ms cubic-bezier(0.4, 0.05, 0.35, 1);
-        }
-        .text-flip-face {
-            left: 0;
-            right: 0;
-            bottom: 0;
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden;
-            box-shadow: 0 0 24px rgba(15, 23, 42, 0.18);
-        }
-        .text-flip-face-back {
-            transform: rotateY(180deg);
-        }
-        .text-flip-clone {
-            position: absolute;
-            top: 0;
-        }
-        /* 넘어가는 종이에 그림자를 얹어 두께가 느껴지게 합니다. */
-        .text-flip-shade {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-        }
-        @media (prefers-reduced-motion: reduce) {
-            .text-flip-leaf {
-                transition: none;
-            }
-        }
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         /* 가로가 긴 화면(모니터, 태블릿 가로)에서는 좌우 여백이 지나치게 넓습니다.
@@ -602,6 +553,25 @@
                 </button>
             </div>
         </div>
+    </div>
+
+    <!-- 원문에서 낱말을 두 번 누르면 나오는 작은 차림표입니다. 누른 자리 아래에 붙습니다. -->
+    <div id="text-action-menu" class="fixed z-50 hidden gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-xl" role="menu">
+        <button id="text-speak-sentence" class="rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-800 transition hover:bg-green-100">
+            문장
+        </button>
+        <button id="text-speak-paragraph" class="rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-800 transition hover:bg-green-100">
+            문단
+        </button>
+    </div>
+
+    <!-- 우클릭(또는 길게 누르기)한 문장의 우리말 해석입니다. 그 문장 바로 아래에 뜹니다. -->
+    <div id="text-translation" class="fixed z-50 hidden w-80 max-w-[90vw] rounded-xl border border-green-200 bg-white p-4 shadow-xl">
+        <p id="text-translation-source" lang="en" class="text-sm leading-relaxed text-gray-500"></p>
+        <p id="text-translation-result" class="mt-2 text-base font-medium leading-relaxed text-gray-800"></p>
+        <button id="text-translation-close" class="mt-3 w-full rounded-lg bg-green-50 px-3 py-2 text-sm font-bold text-green-800 transition hover:bg-green-100">
+            닫기
+        </button>
     </div>
 
     <div id="search-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="search-modal-title">

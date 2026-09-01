@@ -7,6 +7,7 @@ import {
     parseChapterRanges,
     sortChaptersForDisplay
 } from './chapter-organization.js';
+import { sentenceAtOffset, wordAtOffset } from './text-tools.js';
 import {
     sentenceTextForSpeech,
     speakEnglish,
@@ -16,7 +17,7 @@ import {
 
 // 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
 // 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
-const APP_VERSION = '2026-09-01-reading-text';
+const APP_VERSION = '2026-09-01-plain-paging';
 const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
 // 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
@@ -88,6 +89,7 @@ let loadAuthorizedChapter = null;
 let loadAuthorizedAllChapters = null;
 let loadAuthorizedTextIndex = null;
 let loadAuthorizedTextChapter = null;
+let loadAuthorizedTranslation = null;
 // 어휘 검색 상태입니다. 검색 중이 아니면 둘 다 비어 있습니다.
 // wordSearchMatches는 '챕터 position → 매칭된 카드 번호 배열'이고, 이 지도에 없는
 // 챕터는 목록에서 빠집니다.
@@ -270,6 +272,12 @@ async function requestTextIndex() {
         allTextChapters = sortChaptersForDisplay(result.entries);
     }
     return result;
+}
+
+// 문장 하나를 우리말로 옮겨 옵니다. 한 번 옮긴 문장은 auth.js가 기기에 담아 둡니다.
+function requestTranslation(sentence) {
+    if (!loadAuthorizedTranslation) return Promise.reject(new Error('로그인 정보가 준비되지 않았습니다.'));
+    return loadAuthorizedTranslation(sentence);
 }
 
 function requestTextChapter(entry) {
@@ -1069,136 +1077,12 @@ function textCurrentPage(body) {
     return Math.min(textPageCount(body), Math.round(body.scrollLeft / width) + 1);
 }
 
-const TEXT_FLIP_MS = 520;
-let textFlipping = false;
-
-function prefersReducedMotion() {
-    return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-}
-
-// 본문을 한 벌 더 그려 놓고 원하는 자리만 잘라서 보여 줍니다. 넘어가는 종이의 앞뒤
-// 면을 만들 때 씁니다.
-//
-// 본문 자체를 통째로 복제합니다. 클래스를 그대로 물려받아야 문단 사이 간격(space-y-4)
-// 같은 것이 살아 있습니다. 처음에는 자식만 옮겼다가 문단이 다 붙어 버렸습니다.
-// 다만 단 나누기·글자 크기는 `#text-body` id 규칙에만 걸려 있어 복제본에는 적용되지
-// 않으므로, 계산된 값을 직접 옮겨 줍니다. 원본과 한 치라도 다르면 단이 다르게 나뉩니다.
-const FLIP_COPIED_STYLES = [
-    'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color',
-    'textAlign', 'hyphens', 'webkitHyphens',
-    'columnCount', 'columnGap', 'columnFill', 'columnRule'
-];
-
-function buildFlipClone(body, offsetX) {
-    const source = getComputedStyle(body);
-    const clone = body.cloneNode(true);
-    clone.removeAttribute('id');
-    clone.classList.add('text-flip-clone');
-
-    FLIP_COPIED_STYLES.forEach(name => {
-        clone.style[name] = source[name];
-    });
-    // 원본에 걸린 스크롤·여백 클래스는 복제본에서 방해가 됩니다. 단은 상자 밖으로
-    // 흘러 나가야 하므로 넘침을 열어 두고, 여백은 0으로 맞춰 자리를 어긋나지 않게 합니다.
-    clone.style.overflow = 'visible';
-    clone.style.padding = '0';
-    clone.style.margin = '0';
-    clone.style.left = `${-offsetX}px`;
-    clone.style.top = '0';
-    clone.style.width = `${body.clientWidth}px`;
-    clone.style.height = `${body.clientHeight}px`;
-    return clone;
-}
-
-function buildFlipWindow(body, { left, width, offsetX, className = 'text-flip-window' }) {
-    const pane = document.createElement('div');
-    pane.className = className;
-    pane.style.left = `${left}px`;
-    pane.style.width = `${width}px`;
-    pane.style.height = `${body.clientHeight}px`;
-    pane.appendChild(buildFlipClone(body, offsetX));
-    return pane;
-}
-
-/**
- * 책장이 넘어가는 모습을 만듭니다.
- *
- * 실제 책과 같은 순서입니다. 앞으로 넘길 때는 **오른쪽 면**이 가운데 축을 중심으로
- * 왼쪽으로 넘어가고, 그 **뒷면이 새 왼쪽 면**이 되어 내려앉습니다. 넘어가는 동안
- * 밑에는 이미 다음 쪽이 깔려 있어서, 종이가 들리는 만큼 새 오른쪽 면이 드러납니다.
- * 뒤로 넘길 때는 왼쪽 면이 오른쪽으로 넘어가는 정반대입니다.
- */
-function playPageFlip(body, from, to, direction) {
-    const gap = textPageWidth(body) - body.clientWidth;
-    const columnWidth = (body.clientWidth - gap) / 2;
-    const rightOffset = columnWidth + gap;   // 오른쪽 단이 시작하는 자리
-    const rect = body.getBoundingClientRect();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'text-flip-overlay';
-    overlay.style.left = `${rect.left}px`;
-    overlay.style.top = `${rect.top}px`;
-    overlay.style.width = `${rect.width}px`;
-    overlay.style.height = `${rect.height}px`;
-
-    const forward = direction > 0;
-    // 넘어가지 않고 그대로 남아 있는 면. 종이가 다 넘어가면 그 밑에 가려집니다.
-    overlay.appendChild(buildFlipWindow(body, {
-        left: forward ? 0 : rightOffset,
-        width: columnWidth,
-        offsetX: forward ? from : from + rightOffset
-    }));
-
-    const leaf = document.createElement('div');
-    leaf.className = 'text-flip-leaf';
-    leaf.style.left = `${forward ? rightOffset : 0}px`;
-    leaf.style.width = `${columnWidth}px`;
-    leaf.style.height = `${body.clientHeight}px`;
-    // 앞으로 넘길 때는 왼쪽 모서리가, 뒤로 넘길 때는 오른쪽 모서리가 책등입니다.
-    leaf.style.transformOrigin = forward ? 'left center' : 'right center';
-
-    const front = buildFlipWindow(body, {
-        left: 0,
-        width: columnWidth,
-        offsetX: forward ? from + rightOffset : from,
-        className: 'text-flip-face'
-    });
-    const back = buildFlipWindow(body, {
-        left: 0,
-        width: columnWidth,
-        offsetX: forward ? to : to + rightOffset,
-        className: 'text-flip-face text-flip-face-back'
-    });
-    leaf.append(front, back);
-    overlay.appendChild(leaf);
-    document.body.appendChild(overlay);
-
-    // 밑에는 다음 쪽을 미리 깔아 둡니다. 종이가 들리면 그것이 드러납니다.
-    body.scrollLeft = to;
-
-    const done = () => {
-        overlay.remove();
-        textFlipping = false;
-    };
-
-    if (prefersReducedMotion()) {
-        done();
-        return;
-    }
-
-    textFlipping = true;
-    // 시작 자세를 브라우저가 한 번 계산하게 만든 뒤에 목표 자세를 줍니다. 이래야
-    // transition이 걸립니다. requestAnimationFrame으로 미루면 창이 가려져 있을 때
-    // 프레임이 오지 않아 종이가 그대로 서 있습니다(실제로 그랬습니다).
-    void leaf.offsetWidth;
-    leaf.style.transform = `rotateY(${forward ? -180 : 180}deg)`;
-    // transitionend를 놓치는 경우가 있어(탭을 옮겼다 오는 등) 시간으로도 끝냅니다.
-    setTimeout(done, TEXT_FLIP_MS + 60);
-}
-
 function turnTextPage(direction) {
     const body = document.getElementById('text-body');
-    if (!textIsPaged(body) || textFlipping) return;
+    if (!textIsPaged(body)) return;
+
+    // 쪽이 넘어가면 팝업이 가리키던 문장은 화면에서 사라집니다.
+    hideTextPopups();
 
     const width = textPageWidth(body);
     const from = body.scrollLeft;
@@ -1208,7 +1092,8 @@ function turnTextPage(direction) {
     );
     if (Math.abs(target - from) < 1) return;
 
-    playPageFlip(body, from, target, direction);
+    // 넘김 효과 없이 글자만 바로 바뀝니다. 사용자가 그렇게 하기로 정했습니다.
+    body.scrollLeft = target;
     updateTextPager(Math.round(target / width) + 1);
 }
 
@@ -1281,6 +1166,195 @@ function handleTextTouchEnd(event) {
     turnTextPage(moved < 0 ? 1 : -1);
 }
 
+// --- 원문에서 낱말 누르기 ---
+// 이북에서 하듯이, 낱말을 한 번 누르면 그 낱말을, 두 번 누르면 고른 만큼(문장·문단)을
+// 읽어 줍니다. 우클릭하거나 길게 누르면 그 문장의 우리말 해석을 문장 아래에 띄웁니다.
+const TEXT_DOUBLE_CLICK_MS = 260;   // 한 번 누른 것과 두 번 누른 것을 가르는 시간
+const TEXT_LONG_PRESS_MS = 550;
+let textClickTimer = null;
+let textLastTarget = null;          // 두 번 누르기·해석에서 쓸 마지막 낱말 정보
+let textLongPressTimer = null;
+let textLongPressPoint = null;
+
+function caretFromPoint(x, y) {
+    if (document.caretRangeFromPoint) {
+        const range = document.caretRangeFromPoint(x, y);
+        return range ? { node: range.startContainer, offset: range.startOffset } : null;
+    }
+    // 파이어폭스는 이름이 다릅니다.
+    if (document.caretPositionFromPoint) {
+        const position = document.caretPositionFromPoint(x, y);
+        return position ? { node: position.offsetNode, offset: position.offset } : null;
+    }
+    return null;
+}
+
+/**
+ * 누른 자리에서 낱말과 그 낱말이 든 문장·문단을 찾아냅니다.
+ *
+ * 글자를 고르는 것(selection)에 기대지 않습니다. 앱이 글자 선택을 막아 두었기 때문에
+ * 눌린 자리를 좌표로 직접 찾습니다. 문단은 innerText로 채워 글자 마디가 하나뿐이라,
+ * 마디 안의 자리가 곧 문단 안의 자리입니다.
+ */
+function resolveTextTarget(clientX, clientY) {
+    const caret = caretFromPoint(clientX, clientY);
+    if (!caret || caret.node?.nodeType !== Node.TEXT_NODE) return null;
+
+    const paragraph = caret.node.parentElement?.closest('p');
+    if (!paragraph || !paragraph.closest('#text-body')) return null;
+
+    const text = caret.node.data;
+    const word = wordAtOffset(text, caret.offset);
+    if (!word) return null;
+
+    const sentence = sentenceAtOffset(text, caret.offset);
+    return { node: caret.node, paragraph, text, word, sentence };
+}
+
+// 팝업을 문장(또는 낱말) 바로 아래에 붙입니다. 여러 줄에 걸친 문장은 마지막 줄
+// 아래에 둡니다. 화면 밖으로 나가지 않게 좌우와 아래를 눌러 넣습니다.
+function placeNearRange(element, node, start, end, { row = false } = {}) {
+    const range = document.createRange();
+    range.setStart(node, Math.max(start, 0));
+    range.setEnd(node, Math.min(end, node.data.length));
+    const rects = [...range.getClientRects()];
+    const anchor = rects[rects.length - 1] || range.getBoundingClientRect();
+
+    // 차림표는 버튼 둘을 가로로 놓아야 하지만, 해석 카드는 위에서 아래로 쌓입니다.
+    // 카드에까지 flex를 걸었더니 원문·해석·닫기가 세 칸으로 찌그러졌습니다.
+    element.classList.remove('hidden');
+    element.classList.toggle('flex', row);
+    const box = element.getBoundingClientRect();
+    const left = Math.min(Math.max(anchor.left, 8), window.innerWidth - box.width - 8);
+    const belowTop = anchor.bottom + 8;
+    // 아래에 자리가 없으면 문장 위에 띄웁니다.
+    const top = belowTop + box.height > window.innerHeight - 8
+        ? Math.max(anchor.top - box.height - 8, 8)
+        : belowTop;
+
+    element.style.left = `${left}px`;
+    element.style.top = `${top}px`;
+}
+
+function hideTextPopups() {
+    ['text-action-menu', 'text-translation'].forEach(id => {
+        const element = document.getElementById(id);
+        element.classList.add('hidden');
+        element.classList.remove('flex');
+    });
+}
+
+function speakOrNotify(text) {
+    // speakEnglish는 아이폰·아이패드에서 일부러 아무 것도 하지 않습니다. 눌렀는데
+    // 조용하면 고장으로 보이므로 그때만 짧게 알려 줍니다.
+    if (speakEnglish(text)) return;
+    showTextNotice('이 기기에서는 읽어 주기를 쓸 수 없습니다.');
+}
+
+function showTextNotice(message) {
+    const panel = document.getElementById('text-translation');
+    document.getElementById('text-translation-source').innerText = '';
+    document.getElementById('text-translation-result').innerText = message;
+    panel.classList.remove('hidden');
+    panel.classList.remove('flex');
+}
+
+function handleTextClick(event) {
+    // 챕터를 넘기는 버튼은 그대로 눌려야 합니다.
+    if (event.target.closest('button')) return;
+
+    const target = resolveTextTarget(event.clientX, event.clientY);
+    hideTextPopups();
+    if (!target) return;
+
+    textLastTarget = target;
+    // 두 번 누르기가 뒤따라올 수 있으므로 잠깐 기다렸다가 낱말을 읽습니다.
+    clearTimeout(textClickTimer);
+    textClickTimer = setTimeout(() => speakOrNotify(target.word.word), TEXT_DOUBLE_CLICK_MS);
+}
+
+function handleTextDoubleClick(event) {
+    if (event.target.closest('button')) return;
+
+    // 한 번 누르기로 예약된 낱말 읽기는 취소합니다.
+    clearTimeout(textClickTimer);
+    const target = resolveTextTarget(event.clientX, event.clientY) || textLastTarget;
+    if (!target) return;
+
+    textLastTarget = target;
+    const menu = document.getElementById('text-action-menu');
+    document.getElementById('text-translation').classList.add('hidden');
+    placeNearRange(menu, target.node, target.word.start, target.word.end, { row: true });
+}
+
+async function showSentenceTranslation(target) {
+    if (!target?.sentence) return;
+
+    const panel = document.getElementById('text-translation');
+    const source = document.getElementById('text-translation-source');
+    const result = document.getElementById('text-translation-result');
+
+    source.innerText = target.sentence.sentence;
+    result.innerText = '해석을 가져오는 중입니다...';
+    placeNearRange(panel, target.node, target.sentence.start, target.sentence.end);
+
+    try {
+        const translation = await requestTranslation(target.sentence.sentence);
+        // 기다리는 사이에 다른 문장을 눌렀으면 그 결과를 덮지 않습니다.
+        if (source.innerText !== target.sentence.sentence) return;
+        result.innerText = translation;
+    } catch (error) {
+        console.error('해석을 가져오지 못했습니다:', error);
+        result.innerText = '해석을 가져오지 못했습니다. 잠시 후 다시 눌러 주세요.';
+    }
+}
+
+function handleTextContextMenu(event) {
+    if (event.target.closest('button')) return;
+
+    // 앱 전체가 이미 기본 차림표를 막고 있지만, 여기서도 확실히 막습니다.
+    event.preventDefault();
+    const target = resolveTextTarget(event.clientX, event.clientY);
+    hideTextPopups();
+    if (!target) return;
+
+    textLastTarget = target;
+    showSentenceTranslation(target);
+}
+
+// 손가락으로는 우클릭을 할 수 없으므로 길게 누르기로 대신합니다.
+function handleTextTouchHoldStart(event) {
+    if (event.touches.length !== 1 || event.target.closest('button')) return;
+
+    const touch = event.touches[0];
+    textLongPressPoint = { x: touch.clientX, y: touch.clientY };
+    clearTimeout(textLongPressTimer);
+    textLongPressTimer = setTimeout(() => {
+        const target = resolveTextTarget(textLongPressPoint.x, textLongPressPoint.y);
+        textLongPressTimer = null;
+        if (!target) return;
+
+        // 길게 눌러 해석이 떴으면 손을 뗄 때 낱말 읽기가 뒤따르지 않게 합니다.
+        clearTimeout(textClickTimer);
+        textLastTarget = target;
+        hideTextPopups();
+        showSentenceTranslation(target);
+    }, TEXT_LONG_PRESS_MS);
+}
+
+function cancelTextTouchHold(event) {
+    // 쪽을 넘기려고 쓸어 넘기는 중이면 길게 누르기가 아닙니다.
+    if (event?.touches?.[0] && textLongPressPoint) {
+        const moved = Math.hypot(
+            event.touches[0].clientX - textLongPressPoint.x,
+            event.touches[0].clientY - textLongPressPoint.y
+        );
+        if (moved < 10) return;
+    }
+    clearTimeout(textLongPressTimer);
+    textLongPressTimer = null;
+}
+
 function renderTextChapterList() {
     renderGroupedChapterList({
         container: document.getElementById('text-chapter-list'),
@@ -1328,6 +1402,7 @@ async function startTextChapter(index, { historyMode = 'push', animate = true } 
     }
 
     body.appendChild(fragment);
+    hideTextPopups();
     applyTextFontSize();
     showScreen('text-screen', { historyMode, animate });
     // 단이 짜인 뒤라야 쪽 수를 셀 수 있으므로 화면을 띄운 다음에 셉니다.
@@ -1687,7 +1762,10 @@ function continueToNextChapter() {
 
 // --- 시작 화면을 보여 주는 동안 퀴즈/어휘 자료를 미리 받아 둡니다 ---
 export function startReadingApp(api) {
-    const { loadChapterIndex, loadChapter, loadAllChapters, loadTextIndex, loadTextChapter } = api;
+    const {
+        loadChapterIndex, loadChapter, loadAllChapters,
+        loadTextIndex, loadTextChapter, translateSentence
+    } = api;
     novelApi = api;
 
     if (appStarted) {
@@ -1703,6 +1781,7 @@ export function startReadingApp(api) {
     loadAuthorizedAllChapters = loadAllChapters;
     loadAuthorizedTextIndex = loadTextIndex;
     loadAuthorizedTextChapter = loadTextChapter;
+    loadAuthorizedTranslation = translateSentence;
     window.history.replaceState(createHistoryState('novel-screen'), '', window.location.href);
     window.addEventListener('popstate', event => restoreHistoryScreen(event.state));
     document.getElementById('novel-back-btn').addEventListener('click', () => {
@@ -1751,6 +1830,33 @@ export function startReadingApp(api) {
     textBody.addEventListener('wheel', handleTextWheel, { passive: false });
     textBody.addEventListener('touchstart', handleTextTouchStart, { passive: true });
     textBody.addEventListener('touchend', handleTextTouchEnd, { passive: true });
+
+    // 낱말 누르기: 한 번은 낱말 읽기, 두 번은 문장·문단 차림표, 우클릭·길게 누르기는 해석.
+    textBody.addEventListener('click', handleTextClick);
+    textBody.addEventListener('dblclick', handleTextDoubleClick);
+    textBody.addEventListener('contextmenu', handleTextContextMenu);
+    textBody.addEventListener('touchstart', handleTextTouchHoldStart, { passive: true });
+    textBody.addEventListener('touchmove', cancelTextTouchHold, { passive: true });
+    textBody.addEventListener('touchend', cancelTextTouchHold, { passive: true });
+    textBody.addEventListener('touchcancel', cancelTextTouchHold, { passive: true });
+
+    document.getElementById('text-speak-sentence').addEventListener('click', () => {
+        hideTextPopups();
+        speakOrNotify(textLastTarget?.sentence?.sentence);
+    });
+    document.getElementById('text-speak-paragraph').addEventListener('click', () => {
+        hideTextPopups();
+        speakOrNotify(textLastTarget?.paragraph?.innerText);
+    });
+    document.getElementById('text-translation-close').addEventListener('click', hideTextPopups);
+    // 팝업 바깥을 누르거나 Esc를 누르면 닫습니다.
+    document.addEventListener('pointerdown', event => {
+        if (event.target.closest('#text-action-menu, #text-translation, #text-body')) return;
+        hideTextPopups();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') hideTextPopups();
+    });
     // 창 크기나 방향이 바뀌면 한 단 ↔ 두 단이 바뀝니다. 그때마다 다시 셉니다.
     window.addEventListener('resize', () => {
         if (document.getElementById('text-screen').classList.contains('hidden')) return;

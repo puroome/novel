@@ -190,6 +190,36 @@ export function clearLibraryCache(novelId, kind) {
     );
 }
 
+// 같은 문장을 다시 눌러도 서버를 또 부르지 않도록 옮긴 결과를 담아 둡니다.
+// 원문은 바뀌지 않으므로 한 번 옮긴 문장은 계속 쓸 수 있습니다.
+function translationCacheKey(text) {
+    return `translation:${text}`;
+}
+
+export function readCachedTranslation(text) {
+    return safely(
+        async () => {
+            const entry = await runTransaction('readonly', store => readRequest(store, translationCacheKey(text)));
+            return typeof entry === 'string' ? entry : null;
+        },
+        null,
+        '기기에 저장한 해석을 읽지 못했습니다.'
+    );
+}
+
+export function saveCachedTranslation(text, translation) {
+    if (!text || typeof translation !== 'string' || !translation) return Promise.resolve(false);
+
+    return safely(
+        async () => {
+            await runTransaction('readwrite', store => store.put(translation, translationCacheKey(text)));
+            return true;
+        },
+        false,
+        '해석을 기기에 저장하지 못했습니다.'
+    );
+}
+
 // 예전 방식으로 쌓아 둔 localStorage 덩어리는 이제 쓰지 않으므로 자리를 비웁니다.
 export function migrateLegacyLibraryCache(storage = globalThis.localStorage) {
     try {
