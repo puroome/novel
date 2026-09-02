@@ -37,6 +37,20 @@
             display: flex;
             flex-direction: column;
         }
+        /* 시작 화면의 Text 버튼 이름: 좁은 화면(스마트폰)에서는 'Text', 640px 이상
+           (태블릿·데스크톱)에서는 'Reading Text'. 640px은 Word·Quiz가 나란히 놓이는
+           경계(sm:)와 같은 값입니다. */
+        #text-btn-label-full {
+            display: none;
+        }
+        @media (min-width: 640px) {
+            #text-btn-label-short {
+                display: none;
+            }
+            #text-btn-label-full {
+                display: inline;
+            }
+        }
         #chapter-screen,
         #word-chapter-screen,
         #word-screen,
@@ -327,18 +341,19 @@
                 <div class="mt-8 flex justify-center">
                     <div class="inline-flex flex-col gap-3">
                         <div class="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                            <button id="word-btn" class="group inline-flex items-center justify-center gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-red-300 hover:bg-red-100 hover:shadow-lg">
+                            <button id="word-btn" class="group inline-flex items-center gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-red-300 hover:bg-red-100 hover:shadow-lg">
                                 <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-600 text-xl text-white shadow-md">Aa</span>
                                 <span class="text-lg font-bold">Word</span>
                             </button>
-                            <button id="start-btn" class="group inline-flex items-center justify-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-blue-300 hover:bg-blue-100 hover:shadow-lg">
+                            <button id="start-btn" class="group inline-flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-blue-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-blue-300 hover:bg-blue-100 hover:shadow-lg">
                                 <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-xl text-white shadow-md">Q</span>
                                 <span class="text-lg font-bold">Quiz</span>
                             </button>
                         </div>
-                        <button id="text-btn" class="group inline-flex w-full items-center justify-center gap-3 rounded-2xl border border-green-100 bg-green-50 p-4 text-green-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-green-300 hover:bg-green-100 hover:shadow-lg">
+                        <button id="text-btn" class="group inline-flex w-full items-center gap-3 rounded-2xl border border-green-100 bg-green-50 p-4 text-green-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-green-300 hover:bg-green-100 hover:shadow-lg">
                             <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-600 text-xl text-white shadow-md">T</span>
-                            <span class="text-lg font-bold">Reading Text</span>
+                            <!-- 좁은 화면에서는 'Text'만 보입니다. 규칙은 위 <style>에 있습니다. -->
+                            <span class="text-lg font-bold"><span id="text-btn-label-short">Text</span><span id="text-btn-label-full">Reading Text</span></span>
                         </button>
                     </div>
                 </div>

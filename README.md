@@ -218,7 +218,7 @@ python novel-data/tools/upload_text.py holes --json novel-data/holes/text.json
 
 #### 4단계 — 확인
 
-앱에서 그 소설을 열고 **`Reading Text`** 버튼을 누릅니다.
+앱에서 그 소설을 열고 **`Reading Text`**(좁은 화면에서는 **`Text`**) 버튼을 누릅니다.
 
 | 화면에 나오는 말 | 뜻 |
 |---|---|
