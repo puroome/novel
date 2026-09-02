@@ -294,7 +294,7 @@
         </div>
     </section>
 
-    <div class="box-border hidden h-[100dvh] w-full max-w-2xl flex-col bg-white p-4 sm:rounded-2xl sm:p-6 sm:shadow-xl fade-in" id="app-container">
+    <div class="box-border hidden h-[100dvh] w-full max-w-2xl flex-col bg-white p-4 sm:rounded-2xl sm:p-6 sm:shadow-xl" id="app-container">
 
         <div id="novel-screen" class="relative hidden flex flex-1 flex-col items-center justify-center py-6 text-center">
             <div class="absolute right-0 top-0 flex gap-2">
@@ -309,7 +309,7 @@
                 <p class="mb-2 text-xs font-bold uppercase tracking-[0.28em] text-blue-500">Reading journey</p>
                 <h1 class="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">NOVELS</h1>
                 <div id="novel-list" class="mt-8 flex flex-col gap-3"></div>
-                <p class="mt-5 min-h-[1.25rem] text-sm text-slate-400" id="novel-status"></p>
+                <p class="mt-5 min-h-[1.25rem] text-sm text-slate-400" id="novel-status" role="status" aria-live="polite"></p>
             </div>
         </div>
 
@@ -358,7 +358,7 @@
                     </div>
                 </div>
 
-                <p class="mt-5 min-h-[1.25rem] text-sm text-slate-400" id="start-status"></p>
+                <p class="mt-5 min-h-[1.25rem] text-sm text-slate-400" id="start-status" role="status" aria-live="polite"></p>
                 <p class="hidden text-sm font-semibold text-red-500" id="start-load-note">처음 이용시, 시간이 걸리니 기다려주세요.</p>
             </div>
         </div>
@@ -373,7 +373,7 @@
                 </button>
                 <h2 class="flex-1 text-2xl font-bold text-blue-800 text-center pr-12">SELECT A CHAPTER</h2>
             </div>
-            <div id="chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-2"></div>
+            <div id="chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-3"></div>
         </div>
 
         <div id="word-chapter-screen" class="hidden flex flex-1 min-h-0 flex-col">
@@ -400,10 +400,10 @@
                 </span>
                 <span id="word-chapter-search-count" class="text-sm text-gray-500"></span>
             </div>
-            <div id="word-chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-2"></div>
+            <div id="word-chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-3"></div>
         </div>
 
-        <div id="quiz-screen" class="hidden flex flex-1 min-h-0 flex-col overflow-y-auto pr-2">
+        <div id="quiz-screen" class="hidden flex flex-1 min-h-0 flex-col overflow-y-auto pr-3">
             <div id="quiz-header" class="flex justify-between items-center gap-3 mb-6 border-b pb-4">
                 <div class="flex items-center gap-3 min-w-0">
                     <button data-action="go-start" aria-label="처음 화면으로 돌아가기" title="처음 화면으로 돌아가기" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-800 text-white shadow-md hover:bg-slate-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition duration-200">
@@ -478,7 +478,7 @@
                 <span id="word-search-count" class="text-sm text-gray-500"></span>
             </div>
 
-            <div id="word-list" class="flex-1 min-h-0 space-y-3 overflow-y-auto pr-2"></div>
+            <div id="word-list" class="flex-1 min-h-0 space-y-3 overflow-y-auto pr-3"></div>
 
             <div class="mt-4 flex items-center justify-between">
                 <button id="word-prev-btn" aria-label="Previous chapter" title="Previous chapter" class="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-red-200 text-red-700 text-2xl font-bold hover:border-red-500 hover:bg-red-50 transition duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-red-200 disabled:hover:bg-transparent">
@@ -500,7 +500,7 @@
                 </button>
                 <h2 class="flex-1 text-2xl font-bold text-green-700 text-center pr-12">SELECT A CHAPTER</h2>
             </div>
-            <div id="text-chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-2"></div>
+            <div id="text-chapter-list" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-3"></div>
         </div>
 
         <div id="text-screen" class="hidden flex flex-1 min-h-0 flex-col">
@@ -532,7 +532,7 @@
                 </div>
             </div>
 
-            <div id="text-body" lang="en" class="flex-1 min-h-0 space-y-4 overflow-y-auto pr-2 leading-relaxed text-gray-800"></div>
+            <div id="text-body" lang="en" class="flex-1 min-h-0 space-y-4 overflow-y-auto pr-3 leading-relaxed text-gray-800"></div>
 
             <!-- 두 단으로 볼 때만 나옵니다. 한 단일 때는 그냥 세로로 넘깁니다. -->
             <div id="text-pager" class="mt-3 hidden items-center justify-between gap-3">
@@ -563,7 +563,7 @@
                 <button id="continue-no-btn" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2">
                     아니오
                 </button>
-                <button id="continue-yes-btn" class="rounded-xl bg-red-600 px-4 py-3 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2">
+                <button id="continue-yes-btn" class="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
                     예
                 </button>
             </div>
@@ -571,11 +571,11 @@
     </div>
 
     <!-- 원문에서 낱말을 두 번 누르면 나오는 작은 차림표입니다. 누른 자리 아래에 붙습니다. -->
-    <div id="text-action-menu" class="fixed z-50 hidden gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-xl" role="menu">
-        <button id="text-speak-sentence" class="rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-800 transition hover:bg-green-100">
+    <div id="text-action-menu" class="fixed z-50 hidden gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-xl" role="menu" aria-label="선택한 부분 읽어 주기">
+        <button id="text-speak-sentence" role="menuitem" class="rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-800 transition hover:bg-green-100">
             문장
         </button>
-        <button id="text-speak-paragraph" class="rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-800 transition hover:bg-green-100">
+        <button id="text-speak-paragraph" role="menuitem" class="rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-800 transition hover:bg-green-100">
             문단
         </button>
     </div>
@@ -593,7 +593,7 @@
         <form id="search-form" class="w-full max-w-sm rounded-2xl border border-white/70 bg-white p-6 shadow-2xl" novalidate>
             <p id="search-modal-title" class="mb-4 text-center text-lg font-bold leading-relaxed text-slate-800">어휘 · 배경지식 검색</p>
             <input id="search-input" type="text" maxlength="80" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="단어 또는 구를 입력하세요" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
-            <p id="search-status" class="mt-3 min-h-[1.25rem] text-sm text-slate-500"></p>
+            <p id="search-status" class="mt-3 min-h-[1.25rem] text-sm text-slate-500" role="status" aria-live="polite"></p>
             <div class="mt-4 grid grid-cols-2 gap-3">
                 <button id="search-cancel-btn" type="button" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2">
                     취소

@@ -17,7 +17,7 @@ import {
 
 // 앱을 고칠 때마다 아래 번호와 version.json의 번호를 함께 바꿔 주세요.
 // 둘이 어긋나면 tests/app-version.test.mjs가 잡아 줍니다.
-const APP_VERSION = '2026-09-01-plain-paging';
+const APP_VERSION = '2026-09-02-compact-chapter-lists';
 const RELOAD_GUARD_KEY = 'wonder-app-reloaded-for';
 
 // 예전에는 번호 하나를 읽으려고 app.js 전체를 다시 받았습니다. 이제는 수십 바이트짜리
@@ -139,20 +139,13 @@ function saveScreenToHistory(screenId, historyMode) {
     window.history[method](createHistoryState(screenId), '', window.location.href);
 }
 
-function showScreen(screenId, { historyMode = 'push', animate = true } = {}) {
+function showScreen(screenId, { historyMode = 'push' } = {}) {
     SCREEN_IDS.forEach(id => document.getElementById(id).classList.add('hidden'));
 
     // 넓은 화면에서 카드 폭을 화면마다 달리 하려면 지금 어느 화면인지 CSS가 알아야 합니다.
     document.getElementById('app-container').dataset.screen = screenId;
 
-    const screen = document.getElementById(screenId);
-    screen.classList.remove('hidden');
-    screen.classList.remove('fade-in');
-    if (animate) {
-        // 애니메이션 재시작을 위한 트릭
-        void screen.offsetWidth;
-        screen.classList.add('fade-in');
-    }
+    document.getElementById(screenId).classList.remove('hidden');
     saveScreenToHistory(screenId, historyMode);
 }
 
@@ -329,7 +322,7 @@ async function openNovelPicker({ historyMode = 'replace' } = {}) {
         status.innerText = novels.length === 0
             ? '학습 자료가 아직 동기화되지 않았습니다. 선생님께 문의해 주세요.'
             : '읽을 수 있는 소설이 없습니다. 선생님께 문의해 주세요.';
-        showScreen('novel-screen', { historyMode, animate: false });
+        showScreen('novel-screen', { historyMode });
         return;
     }
 
@@ -340,7 +333,7 @@ async function openNovelPicker({ historyMode = 'replace' } = {}) {
 
     status.innerText = '';
     renderNovelList();
-    showScreen('novel-screen', { historyMode, animate: false });
+    showScreen('novel-screen', { historyMode });
 }
 
 function renderNovelList() {
@@ -745,7 +738,7 @@ function clearWordSearch() {
     document.getElementById('word-chapter-list').scrollTop = 0;
 
     if (!document.getElementById('word-screen').classList.contains('hidden')) {
-        openChapter(() => startWordChapter(currentWordChapterIndex, { historyMode: 'none', animate: false }));
+        openChapter(() => startWordChapter(currentWordChapterIndex, { historyMode: 'none' }));
     }
 }
 
@@ -824,10 +817,13 @@ function renderWordChapterList() {
         // 검색 중에는 매칭된 카드가 하나라도 있는 챕터만 남깁니다.
         includeChapter: isWordChapterInSearch,
         onSelect: (index, button) => openChapter(() => startWordChapter(index), button),
+        // 목록에서는 숫자만 보여 줍니다. 무엇을 센 것인지는 title로 남깁니다.
         getCountLabel: chapter => {
             const wordCount = chapter.wordCount || 0;
             const bgCount = chapter.backgroundCount || 0;
-            return bgCount > 0 ? `${wordCount} 단어 · ${bgCount} 배경` : `${wordCount} 단어`;
+            return bgCount > 0
+                ? { text: `${wordCount} · ${bgCount}`, title: `어휘 ${wordCount}개 · 배경지식 ${bgCount}개` }
+                : { text: `${wordCount}`, title: `어휘 ${wordCount}개` };
         }
     });
 }
@@ -897,7 +893,7 @@ function handleTtsClick(event) {
 }
 
 // --- [6-2단계] 단어 학습장 그리기 ---
-async function startWordChapter(index, { historyMode = 'push', animate = true } = {}) {
+async function startWordChapter(index, { historyMode = 'push' } = {}) {
     const entry = allWordChapters[index];
     if (!entry) return;
 
@@ -965,7 +961,7 @@ async function startWordChapter(index, { historyMode = 'push', animate = true } 
     listContainer.appendChild(fragment);
     updateSearchChips();
     updateWordChapterNavigation();
-    showScreen('word-screen', { historyMode, animate });
+    showScreen('word-screen', { historyMode });
 }
 
 // 검색 중에는 매칭된 챕터만 목록에 나오므로 ← → 도 그 챕터들 사이만 오갑니다.
@@ -980,7 +976,7 @@ function findAdjacentWordChapter(direction) {
 function moveWordChapter(direction) {
     const targetIndex = findAdjacentWordChapter(direction);
     if (targetIndex < 0) return;
-    openChapter(() => startWordChapter(targetIndex, { animate: false }));
+    openChapter(() => startWordChapter(targetIndex));
 }
 
 function updateWordChapterNavigation() {
@@ -1360,12 +1356,12 @@ function renderTextChapterList() {
         container: document.getElementById('text-chapter-list'),
         chapters: allTextChapters,
         theme: 'text',
-        onSelect: (index, button) => openChapter(() => startTextChapter(index), button),
-        getCountLabel: chapter => `${chapter.paragraphCount || 0} 문단`
+        // 원문은 문단 수가 읽는 데 도움이 되지 않아 아예 보여 주지 않습니다.
+        onSelect: (index, button) => openChapter(() => startTextChapter(index), button)
     });
 }
 
-async function startTextChapter(index, { historyMode = 'push', animate = true } = {}) {
+async function startTextChapter(index, { historyMode = 'push' } = {}) {
     const entry = allTextChapters[index];
     if (!entry) return;
 
@@ -1396,7 +1392,7 @@ async function startTextChapter(index, { historyMode = 'push', animate = true } 
         nextButton.className = 'w-full rounded-xl bg-green-600 px-4 py-3 text-base font-bold text-white shadow-sm transition duration-200 hover:bg-green-700 hover:shadow-md';
         nextButton.innerText = '다음 챕터로 이동 ➔';
         nextButton.addEventListener('click', () =>
-            openChapter(() => startTextChapter(index + 1, { animate: false }), nextButton)
+            openChapter(() => startTextChapter(index + 1), nextButton)
         );
         fragment.appendChild(nextButton);
     }
@@ -1404,7 +1400,7 @@ async function startTextChapter(index, { historyMode = 'push', animate = true } 
     body.appendChild(fragment);
     hideTextPopups();
     applyTextFontSize();
-    showScreen('text-screen', { historyMode, animate });
+    showScreen('text-screen', { historyMode });
     // 단이 짜인 뒤라야 쪽 수를 셀 수 있으므로 화면을 띄운 다음에 셉니다.
     updateTextPager(1);
 }
@@ -1416,7 +1412,10 @@ function renderChapterList() {
         chapters: allChapters,
         theme: 'quiz',
         onSelect: (index, button) => openChapter(() => startChapter(index), button),
-        getCountLabel: chapter => `${chapter.questionCount || 0} 문제`
+        getCountLabel: chapter => ({
+            text: `${chapter.questionCount || 0}`,
+            title: `문제 ${chapter.questionCount || 0}개`
+        })
     });
 }
 
@@ -1424,7 +1423,7 @@ function formatChapterListLabel(title, fallbackIndex) {
     return formatDisplayChapterTitle(title, fallbackIndex);
 }
 
-function renderGroupedChapterList({ container, chapters, theme, onSelect, getCountLabel, includeChapter = null }) {
+function renderGroupedChapterList({ container, chapters, theme, onSelect, getCountLabel = null, includeChapter = null }) {
     container.innerHTML = '';
     const styles = theme === 'word'
         ? {
@@ -1474,7 +1473,7 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
         .filter(group => group.entries.length > 0);
     const expandByDefault = groups.length === 1;
 
-    groups.forEach(group => {
+    groups.forEach((group, groupIndex) => {
         const section = document.createElement('section');
         section.className = 'space-y-2';
 
@@ -1485,14 +1484,14 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
         const category = splitCategoryLabel(group.category);
         groupButton.innerHTML = `
             <span class="flex min-w-0 items-center gap-3">
-                <span class="inline-flex w-[6.75rem] shrink-0 justify-center rounded-lg px-1 py-1.5 text-[10px] font-extrabold tracking-[0.12em] ${styles.partBadge}">${escapeHtml(category.part.toUpperCase())}</span>
+                <span class="inline-flex shrink-0 justify-center rounded-lg px-2 py-1.5 text-[10px] font-extrabold tracking-[0.12em] ${styles.partBadge}">${escapeHtml(category.part.toUpperCase())}</span>
                 <span class="min-w-0 border-l pl-3 ${styles.separator}">
                     ${category.role ? `<span class="block text-[10px] font-bold uppercase tracking-[0.16em] ${styles.role}">${escapeHtml(category.role)}</span>` : ''}
                     <span class="block truncate text-base font-extrabold ${styles.heading}">${escapeHtml(category.title)}</span>
                 </span>
             </span>
             <span class="flex items-center gap-2 text-sm text-gray-500">
-                <span class="rounded-full bg-white/80 px-3 py-1">${group.entries.length} 챕터</span>
+                <span class="rounded-full bg-white/80 px-3 py-1" title="챕터 ${group.entries.length}개">${group.entries.length}</span>
                 <svg class="h-4 w-4 shrink-0 transition-transform ${styles.chevron}" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.09 1.03l-4.25 4.5a.75.75 0 0 1-1.09 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" /></svg>
             </span>
         `;
@@ -1502,6 +1501,8 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
         // 넓은 화면에서 파트 헤더는 그대로 두고 챕터 버튼만 두 열로 나누기 위한 표시입니다.
         // 규칙은 index.html의 미디어 쿼리에 있습니다.
         chapterPanel.setAttribute('data-chapter-panel', '');
+        chapterPanel.id = `${container.id}-part-${groupIndex}`;
+        groupButton.setAttribute('aria-controls', chapterPanel.id);
         const chevron = groupButton.querySelector('svg');
         if (expandByDefault) {
             groupButton.setAttribute('aria-expanded', 'true');
@@ -1516,6 +1517,10 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
 
         group.entries.forEach(({ chapter, index, info }) => {
             const chapterInfo = info || describeChapter(chapter, index);
+            const count = getCountLabel ? getCountLabel(chapter) : null;
+            const countHtml = count?.text
+                ? `<span class="shrink-0 text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full" title="${escapeHtml(count.title || '')}">${escapeHtml(count.text)}</span>`
+                : '';
             const chapterButton = document.createElement('button');
             chapterButton.className = `w-full text-left bg-white border-2 ${styles.chapter} px-3 py-2.5 rounded-xl transition duration-200 flex justify-between items-center gap-3 group`;
             chapterButton.innerHTML = `
@@ -1523,7 +1528,7 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
                     <span class="inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg px-1 text-sm font-extrabold transition-colors ${styles.chapterNumber}">${chapterInfo.displayNumber}</span>
                     <span class="min-w-0 border-l pl-3 text-base font-bold text-gray-800 transition-colors ${styles.chapterSeparator} ${styles.chapterText}">${escapeHtml(chapterInfo.title)}</span>
                 </span>
-                <span class="shrink-0 text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${escapeHtml(getCountLabel(chapter))}</span>
+                ${countHtml}
             `;
             chapterButton.addEventListener('click', () => onSelect(index, chapterButton));
             chapterPanel.appendChild(chapterButton);
@@ -1534,12 +1539,26 @@ function renderGroupedChapterList({ container, chapters, theme, onSelect, getCou
     });
 }
 
+// 'Part One'처럼 영어 낱말로 적힌 파트 번호를 숫자로 줄입니다. 배지가 가로로 길어져
+// 챕터 제목이 밀리기 때문입니다. 아는 낱말이 아니면 원래 이름을 그대로 씁니다.
+const PART_NUMBER_WORDS = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+    seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12
+};
+
+function shortPartLabel(part) {
+    const token = String(part).replace(/^Part\s+/i, '').trim();
+    const number = PART_NUMBER_WORDS[token.toLowerCase()]
+        ?? (/^\d+$/.test(token) ? Number(token) : null);
+    return number ? `Part ${number}` : String(part);
+}
+
 function splitCategoryLabel(category) {
     const match = String(category).match(/^(Part\s+\w+)\s*:\s*(.+)$/i);
     // Wonder는 파트마다 화자가 바뀌어 'Part One: August' 꼴입니다. 파트가 없는
     // 소설은 그런 형식이 아니므로 화자 줄을 아예 두지 않습니다.
     return match
-        ? { part: match[1], title: match[2], role: 'Narrator' }
+        ? { part: shortPartLabel(match[1]), title: match[2], role: 'Narrator' }
         : { part: 'Chapters', title: String(category), role: '' };
 }
 

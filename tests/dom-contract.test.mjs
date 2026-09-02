@@ -19,8 +19,9 @@ test('앱 코드가 참조하는 화면 요소가 index.html에 모두 존재한
     assert.match(app, /addEventListener\(['"]selectstart['"],\s*event\s*=>\s*event\.preventDefault\(\)\)/);
     assert.match(html, /id="continue-modal"[\s\S]*퀴즈를 계속 푸시겠습니까\?[\s\S]*아니오[\s\S]*예/);
     assert.doesNotMatch(app, /window\.(?:confirm|alert)\s*\(/);
-    assert.match(app, /\$\{bgCount\} 배경/);
-    assert.doesNotMatch(app, /\$\{bgCount\} 배경지식/);
+    // 챕터 목록의 개수는 숫자만 둡니다. 단위를 붙이면 배지가 길어져 제목이 밀립니다.
+    assert.match(app, /text: `\$\{wordCount\} · \$\{bgCount\}`/);
+    assert.doesNotMatch(app, /\$\{bgCount\} 배경/);
     assert.match(app, /window\.history\[method\]\(createHistoryState\(screenId\)/);
     assert.match(app, /addEventListener\(['"]popstate['"],\s*event\s*=>\s*restoreHistoryScreen\(event\.state\)\)/);
 });
