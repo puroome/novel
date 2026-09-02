@@ -20,9 +20,9 @@ const sheets = {
         ['1', 'Ordinary', 'a magic lamp', '요술 램프', '소원을 이루어 주는 램프입니다.']
     ],
     wonder_quiz: [
-        ['chapter_no', 'chapter_title', 'question_no', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4', 'answer', 'evidence', 'explanation'],
-        ['1', 'Ordinary', '1', '평범하다고 느끼는 곳은?', '마음속', '겉모습', '학교', '놀이터', '1', 'And I feel ordinary.', '마음속입니다.'],
-        ['2', 'Why I Didn\'t Go to School', '1', '학교에 가지 않은 이유는?', '수술', '이사', '여행', '방학', '1', 'I had surgeries.', '수술 때문입니다.']
+        ['chapter_no', 'chapter_title', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4', 'answer', 'evidence', 'explanation'],
+        ['1', 'Ordinary', '평범하다고 느끼는 곳은?', '마음속', '겉모습', '학교', '놀이터', '1', 'And I feel ordinary.', '마음속입니다.'],
+        ['2', 'Why I Didn\'t Go to School', '학교에 가지 않은 이유는?', '수술', '이사', '여행', '방학', '1', 'I had surgeries.', '수술 때문입니다.']
     ]
 };
 

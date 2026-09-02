@@ -39,7 +39,7 @@ const BACKGROUND_HEADERS = [
   'chapter_no', 'chapter_title', 'eng', 'kor', 'remark',
 ];
 const QUIZ_HEADERS = [
-  'chapter_no', 'chapter_title', 'question_no', 'question',
+  'chapter_no', 'chapter_title', 'question',
   'choice_1', 'choice_2', 'choice_3', 'choice_4',
   'answer', 'evidence', 'explanation',
 ];
@@ -543,7 +543,6 @@ function buildNovelContent(novel) {
   const quizChapterMap = new Map();
   const wordKeys = new Set();
   const backgroundKeys = new Set();
-  const quizKeys = new Set();
 
   wordRows.forEach(row => {
     const chapter = getOrCreateWordChapter(
@@ -610,13 +609,9 @@ function buildNovelContent(novel) {
     const chapter = getOrCreateQuizChapter(quizChapterMap, metadata);
     if (!chapter.partTitle && metadata.partTitle) chapter.partTitle = metadata.partTitle;
     assertRequiredValues(row, [
-      'question_no', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4',
+      'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4',
       'answer', 'evidence', 'explanation',
     ], QUIZ_SHEET_NAME);
-
-    const questionNo = parsePositiveInteger(row.question_no, row, QUIZ_SHEET_NAME, 'question_no');
-    const duplicateKey = `${chapter.chapterNo}\n${questionNo}`;
-    assertUniqueRow(quizKeys, duplicateKey, row, QUIZ_SHEET_NAME, '같은 챕터에 중복된 question_no가 있습니다.');
 
     const answer = Number.parseInt(row.answer, 10);
     if (!/^[1-4]$/.test(row.answer) || answer < 1 || answer > 4) {
@@ -624,7 +619,6 @@ function buildNovelContent(novel) {
     }
 
     chapter.questions.push({
-      id: `Q${questionNo}`,
       question: row.question,
       options: [row.choice_1, row.choice_2, row.choice_3, row.choice_4],
       answerIndex: answer - 1,
@@ -635,12 +629,10 @@ function buildNovelContent(novel) {
 
   const wordChapterList = [...wordChapterMap.values()]
     .sort((left, right) => left.chapterNo - right.chapterNo);
+  // 문항 순서는 시트의 행 순서 그대로입니다. 예전에는 question_no로 다시 줄을
+  // 세웠지만 그 값이 언제나 행 순서와 같아 관리 비용만 남았습니다.
   const quizChapters = [...quizChapterMap.values()]
-    .sort((left, right) => left.chapterNo - right.chapterNo)
-    .map(chapter => ({
-      ...chapter,
-      questions: chapter.questions.sort((left, right) => questionNumber(left.id) - questionNumber(right.id)),
-    }));
+    .sort((left, right) => left.chapterNo - right.chapterNo);
 
   // 앱은 챕터 목록을 그릴 때 본문이 필요 없습니다. 제목과 개수만 담은 가벼운
   // 목록을 따로 올려 두면, 학생이 고른 챕터 하나만 받아 볼 수 있습니다.
@@ -823,10 +815,6 @@ function parseLabeledEntries(value) {
       ? { term: match[1].trim(), gloss: match[2].trim() }
       : { term: entry, gloss: '' };
   });
-}
-
-function questionNumber(id) {
-  return Number.parseInt(String(id).replace(/^Q/i, ''), 10) || 0;
 }
 
 function contentDigest(value) {

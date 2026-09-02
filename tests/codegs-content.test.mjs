@@ -18,8 +18,8 @@ const sheets = {
         ['1', 'Ordinary', 'a magic lamp', '요술 램프', '소원을 이루어 주는 마법의 램프입니다.']
     ],
     wonder_quiz: [
-        ['chapter_no', 'chapter_title', 'question_no', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4', 'answer', 'evidence', 'explanation'],
-        ['1', 'Ordinary', '1', '어거스트가 평범하다고 느끼는 곳은?', '마음속', '겉모습', '학교', '놀이터', '1', 'And I feel ordinary. Inside.', '마음속으로는 평범하다고 느낍니다.']
+        ['chapter_no', 'chapter_title', 'question', 'choice_1', 'choice_2', 'choice_3', 'choice_4', 'answer', 'evidence', 'explanation'],
+        ['1', 'Ordinary', '어거스트가 평범하다고 느끼는 곳은?', '마음속', '겉모습', '학교', '놀이터', '1', 'And I feel ordinary. Inside.', '마음속으로는 평범하다고 느낍니다.']
     ]
 };
 
@@ -81,7 +81,8 @@ test('Code.gs가 실제 시트 열을 앱 데이터 구조로 변환한다', asy
 
 test('Code.gs는 잘못된 퀴즈 정답을 Firebase 쓰기 전에 거부한다', async () => {
     const invalidQuiz = sheets.wonder_quiz.map(row => [...row]);
-    invalidQuiz[1][8] = '5';
+    // 열 자리를 숫자로 적어 두면 열이 하나 빠질 때마다 어긋납니다. 헤더에서 찾습니다.
+    invalidQuiz[1][sheets.wonder_quiz[0].indexOf('answer')] = '5';
     const context = await loadCodeGs({ wonder_quiz: invalidQuiz });
 
     assert.throws(

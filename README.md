@@ -89,12 +89,15 @@ Google Sheets (소설마다 word / bg / quiz)
 
 ### `{id}_quiz`
 
-| chapter_no | chapter_title | question_no | question | choice_1 | choice_2 | choice_3 | choice_4 | answer | evidence | explanation |
-|---|---|---|---|---|---|---|---|---|---|---|
+| chapter_no | chapter_title | question | choice_1 | choice_2 | choice_3 | choice_4 | answer | evidence | explanation |
+|---|---|---|---|---|---|---|---|---|---|
 
 - `answer`: `1`, `2`, `3`, `4` 중 하나입니다.
 - `evidence`: 정답 확인 뒤 기존 원문 근거 박스에 표시됩니다.
 - `part_title` 열은 없습니다. 같은 `chapter_no`의 `{id}_word` 행에서 물려받습니다.
+- **`question_no` 열도 없습니다.** 문항 순서는 **시트의 행 순서 그대로**입니다.
+  행을 지우거나 더할 때 번호를 다시 매길 일이 없습니다. 시트에 이 열이 남아 있어도
+  동기화는 그냥 무시합니다.
 
 ## 원문 (`novel/text`)
 
